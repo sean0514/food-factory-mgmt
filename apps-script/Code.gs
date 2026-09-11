@@ -3,6 +3,14 @@
  * 架構沿用「境外實習生管理系統」：Apps Script + Google 試算表，單一 Code.gs + Index.html。
  */
 
+// 網頁應用程式的進入點，部署為網頁應用程式時 Apps Script 會呼叫這個函式
+function doGet(e) {
+  return HtmlService.createHtmlOutputFromFile('Index')
+    .setTitle('食品工廠管理系統')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
 // ============ 基礎設定 ============
 
 var ROLES = ['系統管理員', '廠長主管', '倉管人員', '產線人員', '品管人員', '業務出貨人員', '會計人員'];
