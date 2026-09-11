@@ -450,6 +450,7 @@ function makeSalt_() {
 }
 
 function login(username, password) {
+  ensureSeedAdmin_();
   var users = sheetToObjects_('Users');
   var user = users.filter(function(u) { return u.username === username && String(u.active) !== 'false'; })[0];
   if (!user) throw new Error('帳號或密碼錯誤');

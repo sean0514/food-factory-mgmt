@@ -63,6 +63,15 @@ test('倉管人員預設對損益表沒有 edit 權限', () => {
   assert.notStrictEqual(sandbox.permFor_('倉管人員', 'incomeStatement'), 'edit');
 });
 
+console.log('登入（迴歸測試：第一次登入不該卡在雞生蛋蛋生雞）');
+test('全新環境（Users 表完全是空的）直接呼叫 login 就能用預設帳號登入，不需要事先手動呼叫 ensureSeedAdmin_', () => {
+  const freshSandbox = createGasGlobals();
+  vm.createContext(freshSandbox);
+  vm.runInContext(code, freshSandbox, {filename: 'Code.gs'});
+  const res = freshSandbox.login('admin', 'admin123'); // 曾經因為 ensureSeedAdmin_ 只在 getAllData 裡呼叫而失敗
+  assert.ok(res.token);
+});
+
 // 建帳號＋登入，取得後續整合測試共用的 token
 sandbox.ensureSeedAdmin_();
 const session = sandbox.login('admin', 'admin123');
