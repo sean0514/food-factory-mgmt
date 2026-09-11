@@ -623,6 +623,21 @@ function materialStockList(token) {
   });
 }
 
+// 該原料目前還有庫存的批號清單（給用料明細的批號下拉選單用）
+function materialBatchStock(token, materialId) {
+  requireSession_(token);
+  var logs = sheetToObjects_('InventoryLogs').filter(function(l) { return String(l.materialId) === String(materialId); });
+  var byBatch = {};
+  logs.forEach(function(l) {
+    var b = l.batchNo || '(無批號)';
+    if (!byBatch[b]) byBatch[b] = 0;
+    var n = Number(l.quantity) || 0;
+    byBatch[b] += l.type === '入庫' ? n : -n;
+  });
+  return Object.keys(byBatch).filter(function(b) { return byBatch[b] > 0; })
+    .map(function(b) { return {batchNo: b, remaining: byBatch[b]}; });
+}
+
 function materialPriceTrend(token, materialId) {
   requireSession_(token);
   return sheetToObjects_('Purchases')

@@ -4,33 +4,121 @@
 <base target="_top">
 <meta charset="utf-8">
 <style>
+  :root {
+    --bg: #f3f4f7;
+    --surface: #ffffff;
+    --surface-muted: #f8fafc;
+    --border: #e2e6ee;
+    --text: #1e2430;
+    --text-muted: #6b7280;
+    --primary: #4f46e5;
+    --primary-dark: #4338ca;
+    --primary-soft: #eef0fe;
+    --danger: #dc2626;
+    --danger-soft: #fee2e2;
+    --success: #16a34a;
+    --success-soft: #dcfce7;
+    --warn: #d97706;
+    --warn-soft: #fef3c7;
+    --sidebar-bg: #1c2333;
+    --sidebar-bg-active: #2a3348;
+    --sidebar-text: #aab2c5;
+    --radius: 10px;
+    --shadow: 0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.06);
+  }
   * { box-sizing: border-box; }
-  body { font-family: "Microsoft JhengHei", Arial, sans-serif; margin: 0; background: #f4f5f7; color: #222; }
+  body {
+    font-family: "Segoe UI", "Microsoft JhengHei", "PingFang TC", Arial, sans-serif;
+    margin: 0; background: var(--bg); color: var(--text); font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
   #app { display: flex; min-height: 100vh; }
-  #sidebar { width: 220px; background: #1f2937; color: #fff; padding: 16px 0; flex-shrink: 0; }
-  #sidebar h1 { font-size: 16px; padding: 0 16px 16px; border-bottom: 1px solid #374151; margin: 0 0 8px; }
-  #sidebar a { display: block; color: #d1d5db; text-decoration: none; padding: 8px 16px; cursor: pointer; font-size: 14px; }
-  #sidebar a:hover, #sidebar a.active { background: #374151; color: #fff; }
-  #sidebar .group-title { padding: 8px 16px 4px; font-size: 12px; color: #9ca3af; margin-top: 8px; }
-  #main { flex: 1; padding: 20px; overflow-x: auto; }
-  .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-  table { width: 100%; border-collapse: collapse; background: #fff; }
-  th, td { border: 1px solid #e5e7eb; padding: 6px 10px; font-size: 13px; text-align: left; }
-  th { background: #f3f4f6; }
-  button { cursor: pointer; padding: 6px 12px; border-radius: 4px; border: 1px solid #d1d5db; background: #fff; font-size: 13px; }
-  button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
-  button.danger { background: #dc2626; color: #fff; border-color: #dc2626; }
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 50; }
-  .modal { background: #fff; border-radius: 6px; padding: 20px; width: 480px; max-height: 85vh; overflow-y: auto; }
-  .modal label { display: block; font-size: 13px; margin: 8px 0 2px; }
-  .modal input, .modal select, .modal textarea { width: 100%; padding: 6px; border: 1px solid #d1d5db; border-radius: 4px; }
-  .card { background: #fff; border-radius: 6px; padding: 16px; margin-bottom: 16px; }
-  .cards { display: flex; gap: 12px; flex-wrap: wrap; }
-  .stat { background: #fff; border-radius: 6px; padding: 16px; min-width: 160px; }
-  .stat .num { font-size: 22px; font-weight: bold; }
-  .login-box { max-width: 320px; margin: 100px auto; background: #fff; padding: 24px; border-radius: 6px; }
-  .toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
-  input[type=text], input[type=search] { padding: 6px; border: 1px solid #d1d5db; border-radius: 4px; }
+
+  /* -------- 側邊欄 -------- */
+  #sidebar { width: 230px; background: var(--sidebar-bg); color: #fff; padding: 18px 0 24px; flex-shrink: 0; }
+  #sidebar h1 { font-size: 15px; font-weight: 600; padding: 0 20px 16px; border-bottom: 1px solid rgba(255,255,255,.08); margin: 0 0 10px; letter-spacing: .3px; }
+  #sidebar a { display: block; color: var(--sidebar-text); text-decoration: none; padding: 9px 20px; cursor: pointer; font-size: 13.5px; border-left: 3px solid transparent; transition: background .12s, color .12s; }
+  #sidebar a:hover { background: rgba(255,255,255,.05); color: #fff; }
+  #sidebar a.active { background: var(--sidebar-bg-active); color: #fff; border-left-color: var(--primary); font-weight: 600; }
+  #sidebar .group-title { padding: 14px 20px 4px; font-size: 11px; color: #6b7488; text-transform: uppercase; letter-spacing: .6px; font-weight: 600; }
+
+  /* -------- 主要內容 -------- */
+  #main { flex: 1; padding: 24px 28px; overflow-x: auto; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .topbar > div:first-child { font-size: 13px; color: var(--text-muted); }
+  .topbar > div:first-child b, .topbar > div:first-child strong { color: var(--text); }
+
+  h2 { font-size: 17px; font-weight: 600; margin: 0; }
+  h3 { font-size: 14.5px; font-weight: 600; }
+
+  /* -------- 表格 -------- */
+  table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: 13px; }
+  th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--surface-muted); color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .3px; position: sticky; top: 0; }
+  tbody tr:hover { background: var(--surface-muted); }
+  tbody tr:last-child td { border-bottom: none; }
+
+  /* -------- 按鈕 -------- */
+  button {
+    cursor: pointer; padding: 7px 14px; border-radius: 7px; border: 1px solid var(--border);
+    background: var(--surface); font-size: 13px; color: var(--text); font-weight: 500;
+    transition: background .12s, border-color .12s, transform .05s; line-height: 1.3;
+  }
+  button:hover { background: var(--surface-muted); border-color: #c7cede; }
+  button:active { transform: translateY(1px); }
+  button.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  button.primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+  button.danger { background: #fff; color: var(--danger); border-color: #f3c9c9; }
+  button.danger:hover { background: var(--danger-soft); border-color: var(--danger); }
+  #logoutBtn { background: transparent; border-color: var(--border); color: var(--text-muted); }
+
+  /* -------- 彈出視窗 -------- */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(20,24,34,.45); display: flex; align-items: center; justify-content: center; z-index: 50; backdrop-filter: blur(1px); }
+  .modal { background: var(--surface); border-radius: var(--radius); padding: 22px; width: 480px; max-height: 85vh; overflow-y: auto; box-shadow: 0 12px 32px rgba(16,24,40,.22); }
+  .modal h3 { margin: 0 0 4px; }
+  .modal label { display: block; font-size: 12.5px; color: var(--text-muted); font-weight: 600; margin: 12px 0 4px; }
+  .modal input, .modal select, .modal textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px;
+    font-size: 13.5px; color: var(--text); background: var(--surface); font-family: inherit;
+  }
+  .modal input:focus, .modal select:focus, .modal textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+  .modal input:disabled, .modal select:disabled { background: var(--surface-muted); color: var(--text-muted); }
+  .modal .date-select select { width: auto; flex: 1; }
+
+  /* -------- 卡片 -------- */
+  .card { background: var(--surface); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 18px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+  .card table { box-shadow: none; }
+  .cards { display: flex; gap: 14px; flex-wrap: wrap; }
+  .stat { background: var(--surface); border-radius: var(--radius); padding: 18px 20px; min-width: 170px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+  .stat > div:first-child { font-size: 12.5px; color: var(--text-muted); font-weight: 600; margin-bottom: 6px; }
+  .stat .num { font-size: 26px; font-weight: 700; color: var(--primary); }
+
+  /* -------- 登入頁 -------- */
+  .login-box { max-width: 340px; margin: 12vh auto; background: var(--surface); padding: 32px 28px; border-radius: var(--radius); box-shadow: 0 12px 32px rgba(16,24,40,.12); border: 1px solid var(--border); }
+  .login-box h2 { text-align: center; margin-bottom: 22px; }
+  .login-box label { display: block; font-size: 12.5px; color: var(--text-muted); font-weight: 600; margin: 12px 0 4px; }
+  .login-box input { width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px; font-size: 14px; }
+  .login-box input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+  .login-box button.primary { width: 100%; padding: 10px; font-size: 14px; border-radius: 7px; }
+
+  .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+  input[type=text], input[type=search], input[type=number], input[type=month] {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: 13.5px; font-family: inherit;
+  }
+
+  /* -------- 狀態標籤 -------- */
+  .tag { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.6; }
+  .tag-green { background: var(--success-soft); color: #15803d; }
+  .tag-red { background: var(--danger-soft); color: #b91c1c; }
+  .tag-amber { background: var(--warn-soft); color: #b45309; }
+  .tag-gray { background: #eef0f4; color: var(--text-muted); }
+  .tag-blue { background: var(--primary-soft); color: var(--primary-dark); }
+
+  @media (max-width: 720px) {
+    #app { flex-direction: column; }
+    #sidebar { width: 100%; padding: 10px 0; }
+    #main { padding: 16px; }
+  }
 </style>
 </head>
 <body>
@@ -157,6 +245,7 @@ var GENERIC_PAGES = {
   materials: {table: 'materials', title: '原料主檔', addFn: 'genericAdd', args: ['materials'],
     fields: [
       {key: 'name', label: '原料名稱'}, {key: 'category', label: '分類'}, {key: 'unit', label: '單位'},
+      {key: 'defaultSupplierId', label: '常用供應商', type: 'select', source: 'suppliers'},
       {key: 'safetyStock', label: '安全庫存量', type: 'number'}, {key: 'storageCondition', label: '儲存條件'}, {key: 'note', label: '備註'}
     ]},
   suppliers: {table: 'suppliers', title: '供應商', addFn: 'genericAdd', args: ['suppliers'],
@@ -217,6 +306,47 @@ function renderPage() {
 }
 
 function fmt(n) { return (Number(n) || 0).toLocaleString(undefined, {maximumFractionDigits: 2}); }
+
+// 狀態欄位用的彩色標籤，map 是 { 文字: 顏色class } 的對照表，沒對到的用灰色
+function tag(text, map) {
+  var cls = (map && map[text]) || 'tag-gray';
+  return '<span class="tag ' + cls + '">' + (text || '-') + '</span>';
+}
+var INSPECTION_TAG = {'合格': 'tag-green', '不合格': 'tag-red', '待驗': 'tag-amber'};
+var BATCH_STATUS_TAG = {'完成': 'tag-green', '生產中': 'tag-blue', '異常': 'tag-red'};
+var INVOICE_STATUS_TAG = {'已收款': 'tag-green', '已請款': 'tag-amber', '未請款': 'tag-gray'};
+var QC_RESULT_TAG = {'合格': 'tag-green', '不合格': 'tag-red'};
+var DIRECTION_TAG = {'收入': 'tag-green', '支出': 'tag-red'};
+
+// 年/月/日三個下拉選單組成的日期欄位（原生 <input type=date> 在部分瀏覽器/環境下
+// 點擊沒有反應，改用純下拉選單比較保險）。optional=true 時最上面多一個空白選項，
+// 沒選滿三個就回傳空字串。
+function dateSelectHTML(id, value, optional) {
+  var now = new Date();
+  var d = value ? new Date(value + 'T00:00:00') : null;
+  var y = d ? d.getFullYear() : now.getFullYear();
+  var m = d ? d.getMonth() + 1 : now.getMonth() + 1;
+  var day = d ? d.getDate() : now.getDate();
+  var years = [];
+  for (var yy = now.getFullYear() + 2; yy >= now.getFullYear() - 6; yy--) years.push(yy);
+  var months = [1,2,3,4,5,6,7,8,9,10,11,12];
+  var days = []; for (var dd = 1; dd <= 31; dd++) days.push(dd);
+  var blank = optional ? '<option value="">-</option>' : '';
+  var yOpts = blank + years.map(function(yy) { return '<option value="' + yy + '"' + (d && yy === y ? ' selected' : '') + '>' + yy + '</option>'; }).join('');
+  var mOpts = blank + months.map(function(mm) { return '<option value="' + mm + '"' + (d && mm === m ? ' selected' : '') + '>' + mm + '</option>'; }).join('');
+  var dOpts = blank + days.map(function(dd) { return '<option value="' + dd + '"' + (d && dd === day ? ' selected' : '') + '>' + dd + '</option>'; }).join('');
+  return '<div class="date-select" style="display:flex;gap:4px;align-items:center;">' +
+    '<select id="' + id + '_y">' + yOpts + '</select><span>年</span>' +
+    '<select id="' + id + '_m">' + mOpts + '</select><span>月</span>' +
+    '<select id="' + id + '_d">' + dOpts + '</select><span>日</span></div>';
+}
+function dateSelectValue(id) {
+  var y = document.getElementById(id + '_y').value;
+  var m = document.getElementById(id + '_m').value;
+  var d = document.getElementById(id + '_d').value;
+  if (!y || !m || !d) return '';
+  return y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+}
 
 // ============ CSV 匯出（通用） ============
 function exportRowsToCsv(filename, columns, rows) {
@@ -309,7 +439,7 @@ function renderGenericList(root, page) {
     cfg.fields.map(function(f) { return '<th>' + f.label.split('（')[0] + '</th>'; }).join('') +
     (editable ? '<th></th>' : '') + '</tr></thead><tbody>' +
     rows.map(function(r) {
-      return '<tr>' + cfg.fields.map(function(f) { return '<td>' + (r[f.key] || '') + '</td>'; }).join('') +
+      return '<tr>' + cfg.fields.map(function(f) { return '<td>' + genericFieldDisplay_(f, r[f.key]) + '</td>'; }).join('') +
         (editable ? '<td><button data-edit="' + r.id + '">編輯</button> <button class="danger" data-del="' + r.id + '">刪除</button></td>' : '') +
         '</tr>';
     }).join('') + '</tbody></table></div>';
@@ -338,12 +468,28 @@ function renderGenericList(root, page) {
   }
 }
 
+// 跨表參照欄位（type:'select', source:'suppliers' 之類）顯示名稱而不是原始 ID
+function genericFieldDisplay_(f, value) {
+  if (f.type === 'select' && f.source) {
+    var list = state.data[f.source] || [];
+    var item = list.filter(function(x) { return String(x.id) === String(value); })[0];
+    return item ? item.name : (value || '');
+  }
+  return value || '';
+}
+
 function openGenericForm(page, existing) {
   var cfg = GENERIC_PAGES[page];
   var overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = '<div class="modal"><h3>' + (existing ? '編輯' : '新增') + cfg.title + '</h3>' +
     cfg.fields.map(function(f) {
+      if (f.type === 'select' && f.source) {
+        var options = state.data[f.source] || [];
+        return '<label>' + f.label + '</label><select data-field="' + f.key + '"><option value="">（無）</option>' +
+          options.map(function(o) { return '<option value="' + o.id + '"' + (existing && String(existing[f.key]) === String(o.id) ? ' selected' : '') + '>' + o.name + '</option>'; }).join('') +
+          '</select>';
+      }
       return '<label>' + f.label + '</label><input data-field="' + f.key + '" type="' + (f.type || 'text') + '" value="' +
         (existing ? (existing[f.key] || '') : '') + '">';
     }).join('') +
@@ -389,7 +535,7 @@ function renderPurchases(root) {
     rows.map(function(r) {
       return '<tr><td>' + r.date + '</td><td>' + supName(r.supplierId) + '</td><td>' + matName(r.materialId) + '</td>' +
         '<td>' + r.batchNo + '</td><td>' + r.quantity + '</td><td>' + fmt(r.unitPrice) + '</td><td>' + fmt(r.amount) +
-        '</td><td>' + (r.expiryDate || '') + '</td><td>' + (r.inspectionStatus || '') + '</td>' +
+        '</td><td>' + (r.expiryDate || '') + '</td><td>' + tag(r.inspectionStatus, INSPECTION_TAG) + '</td>' +
         (editable ? '<td><button data-edit="' + r.id + '">編輯</button> <button class="danger" data-del="' + r.id + '">刪除</button></td>' : '') + '</tr>';
     }).join('') + '</tbody></table></div>';
   document.getElementById('exportBtn').onclick = function() {
@@ -417,26 +563,32 @@ function openPurchaseForm(materials, suppliers, existing) {
   var isEdit = !!existing;
   overlay.innerHTML = '<div class="modal"><h3>' + (isEdit ? '編輯進貨' : '新增進貨') + '</h3>' +
     (isEdit ? '<p style="color:#888;font-size:12px;">供應商/原料/數量為避免庫存對不起來，不開放編輯；要改請刪除後重新新增。</p>' : '') +
-    '<label>供應商</label><select id="f_supplierId" ' + (isEdit ? 'disabled' : '') + '>' +
-      suppliers.map(function(s){return '<option value="'+s.id+'"' + (isEdit && String(existing.supplierId)===String(s.id) ? ' selected' : '') + '>'+s.name+'</option>';}).join('') + '</select>' +
     '<label>原料</label><select id="f_materialId" ' + (isEdit ? 'disabled' : '') + '>' +
       materials.map(function(m){return '<option value="'+m.id+'"' + (isEdit && String(existing.materialId)===String(m.id) ? ' selected' : '') + '>'+m.name+'</option>';}).join('') + '</select>' +
-    '<label>進貨日期</label><input id="f_date" type="date" value="' + (isEdit ? existing.date : new Date().toISOString().slice(0,10)) + '">' +
+    '<label>供應商' + (isEdit ? '' : '（選原料會自動帶出常用供應商，可再自行更改）') + '</label><select id="f_supplierId" ' + (isEdit ? 'disabled' : '') + '>' +
+      suppliers.map(function(s){return '<option value="'+s.id+'"' + (isEdit && String(existing.supplierId)===String(s.id) ? ' selected' : '') + '>'+s.name+'</option>';}).join('') + '</select>' +
+    '<label>進貨日期</label>' + dateSelectHTML('f_date', isEdit ? existing.date : new Date().toISOString().slice(0,10), false) +
     '<label>批號（供應商提供）</label><input id="f_batchNo" type="text" value="' + (isEdit ? existing.batchNo : '') + '">' +
     '<label>數量' + (isEdit ? '（不可改）' : '') + '</label><input id="f_quantity" type="number" value="' + (isEdit ? existing.quantity : '') + '" ' + (isEdit ? 'disabled' : '') + '>' +
     '<label>單價</label><input id="f_unitPrice" type="number" value="' + (isEdit ? existing.unitPrice : '') + '">' +
-    '<label>效期</label><input id="f_expiryDate" type="date" value="' + (isEdit ? (existing.expiryDate||'') : '') + '">' +
+    '<label>效期</label>' + dateSelectHTML('f_expiryDate', isEdit ? (existing.expiryDate||'') : '', true) +
     '<label>驗收狀態</label><select id="f_inspectionStatus">' +
       ['合格','不合格','待驗'].map(function(s){return '<option' + (isEdit && existing.inspectionStatus===s ? ' selected' : '') + '>'+s+'</option>';}).join('') + '</select>' +
     '<label>備註</label><input id="f_note" type="text" value="' + (isEdit ? (existing.note||'') : '') + '">' +
     '<div style="margin-top:16px;text-align:right;"><button id="cancelBtn">取消</button> <button class="primary" id="saveBtn">儲存</button></div></div>';
   document.body.appendChild(overlay);
+  if (!isEdit) {
+    overlay.querySelector('#f_materialId').onchange = function(e) {
+      var m = materials.filter(function(x) { return String(x.id) === e.target.value; })[0];
+      if (m && m.defaultSupplierId) overlay.querySelector('#f_supplierId').value = m.defaultSupplierId;
+    };
+  }
   overlay.querySelector('#cancelBtn').onclick = function() { overlay.remove(); };
   overlay.querySelector('#saveBtn').onclick = function() {
     if (isEdit) {
       var patch = {
-        date: overlay.querySelector('#f_date').value, batchNo: overlay.querySelector('#f_batchNo').value,
-        unitPrice: overlay.querySelector('#f_unitPrice').value, expiryDate: overlay.querySelector('#f_expiryDate').value,
+        date: dateSelectValue('f_date'), batchNo: overlay.querySelector('#f_batchNo').value,
+        unitPrice: overlay.querySelector('#f_unitPrice').value, expiryDate: dateSelectValue('f_expiryDate'),
         inspectionStatus: overlay.querySelector('#f_inspectionStatus').value, note: overlay.querySelector('#f_note').value
       };
       callServer('updatePurchase', [state.token, existing.id, patch]).then(function() { overlay.remove(); loadAll(); }).catch(function(e){alert(e.message||e);});
@@ -444,11 +596,11 @@ function openPurchaseForm(materials, suppliers, existing) {
       var data = {
         supplierId: overlay.querySelector('#f_supplierId').value,
         materialId: overlay.querySelector('#f_materialId').value,
-        date: overlay.querySelector('#f_date').value,
+        date: dateSelectValue('f_date'),
         batchNo: overlay.querySelector('#f_batchNo').value,
         quantity: overlay.querySelector('#f_quantity').value,
         unitPrice: overlay.querySelector('#f_unitPrice').value,
-        expiryDate: overlay.querySelector('#f_expiryDate').value,
+        expiryDate: dateSelectValue('f_expiryDate'),
         inspectionStatus: overlay.querySelector('#f_inspectionStatus').value,
         note: overlay.querySelector('#f_note').value
       };
@@ -479,7 +631,7 @@ function renderProductionBatches(root) {
         }
       }
       return '<tr><td>' + r.batchNo + '</td><td>' + prodName(r.productId) + '</td><td>' + r.date + '</td><td>' + (r.line||'') +
-        '</td><td>' + (r.responsible||'') + '</td><td>' + r.plannedQty + '</td><td>' + r.actualQty + '</td><td>' + r.status +
+        '</td><td>' + (r.responsible||'') + '</td><td>' + r.plannedQty + '</td><td>' + r.actualQty + '</td><td>' + tag(r.status, BATCH_STATUS_TAG) +
         '</td><td>' + actions.join(' ') + '</td></tr>';
     }).join('') + '</tbody></table></div><div id="usagePanel"></div>';
   document.getElementById('exportBtn').onclick = function() {
@@ -518,7 +670,7 @@ function openBatchForm(products, existing) {
   overlay.innerHTML = '<div class="modal"><h3>' + (isEdit ? '編輯生產批次：' + existing.batchNo : '新增生產批次') + '</h3>' +
     '<label>產品' + (isEdit ? '（不可改）' : '') + '</label><select id="f_productId" ' + (isEdit ? 'disabled' : '') + '>' +
       products.map(function(p){return '<option value="'+p.id+'"' + (isEdit && String(existing.productId)===String(p.id) ? ' selected' : '') + '>'+p.name+'</option>';}).join('') + '</select>' +
-    '<label>生產日期</label><input id="f_date" type="date" value="' + (isEdit ? existing.date : new Date().toISOString().slice(0,10)) + '">' +
+    '<label>生產日期</label>' + dateSelectHTML('f_date', isEdit ? existing.date : new Date().toISOString().slice(0,10), false) +
     '<label>產線</label><input id="f_line" type="text" value="' + (isEdit ? (existing.line||'') : '') + '">' +
     '<label>負責人</label><input id="f_responsible" type="text" value="' + (isEdit ? (existing.responsible||'') : '') + '">' +
     '<label>計畫產量</label><input id="f_plannedQty" type="number" value="' + (isEdit ? existing.plannedQty : '') + '">' +
@@ -528,7 +680,7 @@ function openBatchForm(products, existing) {
   overlay.querySelector('#cancelBtn').onclick = function() { overlay.remove(); };
   overlay.querySelector('#saveBtn').onclick = function() {
     var data = {
-      date: overlay.querySelector('#f_date').value,
+      date: dateSelectValue('f_date'),
       line: overlay.querySelector('#f_line').value,
       responsible: overlay.querySelector('#f_responsible').value,
       plannedQty: overlay.querySelector('#f_plannedQty').value,
@@ -552,15 +704,27 @@ function renderUsagePanel(batchNo) {
     usage.map(function(u) { return '<tr><td>' + matName(u.materialId) + '</td><td>' + u.materialBatchNo + '</td><td>' + u.quantity + '</td></tr>'; }).join('') +
     '</tbody></table>' +
     (canEdit('productionBatches') ?
-      '<div style="margin-top:12px;"><select id="u_materialId">' + materials.map(function(m){return '<option value="'+m.id+'">'+m.name+'</option>';}).join('') + '</select> ' +
-      '<input id="u_materialBatchNo" placeholder="原料批號" style="width:120px;"> ' +
+      '<div style="margin-top:12px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">' +
+      '<select id="u_materialId">' + materials.map(function(m){return '<option value="'+m.id+'">'+m.name+'</option>';}).join('') + '</select> ' +
+      '<select id="u_materialBatchNo" style="width:160px;"></select> ' +
       '<input id="u_quantity" type="number" placeholder="數量" style="width:80px;"> ' +
       '<button class="primary" id="u_addBtn">新增用料</button></div>' : '') + '</div>';
   if (canEdit('productionBatches')) {
+    function loadBatchOptions(materialId) {
+      var select = document.getElementById('u_materialBatchNo');
+      select.innerHTML = '<option value="">載入中...</option>';
+      callServer('materialBatchStock', [state.token, materialId]).then(function(batches) {
+        select.innerHTML = batches.length ? batches.map(function(b) { return '<option value="' + b.batchNo + '">' + b.batchNo + '（剩 ' + b.remaining + '）</option>'; }).join('')
+          : '<option value="">（此原料目前沒有庫存）</option>';
+      });
+    }
+    document.getElementById('u_materialId').onchange = function(e) { loadBatchOptions(e.target.value); };
+    loadBatchOptions(document.getElementById('u_materialId').value);
     document.getElementById('u_addBtn').onclick = function() {
       var data = {batchNo: batchNo, materialId: document.getElementById('u_materialId').value,
         materialBatchNo: document.getElementById('u_materialBatchNo').value, quantity: document.getElementById('u_quantity').value};
-      callServer('addProductionMaterialUsage', [state.token, data]).then(function() { loadAll().then(function(){ renderUsagePanel(batchNo); }); });
+      if (!data.materialBatchNo) { alert('請選擇原料批號（此原料可能目前沒有庫存）'); return; }
+      callServer('addProductionMaterialUsage', [state.token, data]).then(function() { loadAll().then(function(){ renderUsagePanel(batchNo); }); }).catch(function(e){alert(e.message||e);});
     };
   }
 }
@@ -601,7 +765,7 @@ function renderShipments(root) {
         (!r.invoiceId ? ' <button class="danger" data-del="' + r.id + '">刪除</button>' : '') : '';
       return '<tr><td>' + r.shipmentNo + '</td><td>' + custName(r.customerId) + '</td><td>' + r.date + '</td><td>' + prodName(r.productId) +
         '</td><td>' + r.batchNo + '</td><td>' + r.quantity + '</td><td>' + fmt(r.unitPrice) + '</td><td>' + fmt(r.total) +
-        '</td><td>' + (r.invoiceId ? '已請款' : '未請款') + '</td><td>' + actions + '</td></tr>';
+        '</td><td>' + tag(r.invoiceId ? '已請款' : '未請款', INVOICE_STATUS_TAG) + '</td><td>' + actions + '</td></tr>';
     }).join('') + '</tbody></table></div>';
   document.getElementById('exportBtn').onclick = function() {
     exportRowsToCsv('出貨單.csv',
@@ -639,7 +803,7 @@ function openShipmentForm(products, customers, existing) {
     (isEdit ? ('<label>成品批號（不可改）</label><input type="text" value="' + existing.batchNo + '" disabled>') :
       ('<label>成品</label><select id="f_productId">' + products.map(function(p){return '<option value="'+p.id+'">'+p.name+'</option>';}).join('') + '</select>' +
        '<label>成品批號</label><select id="f_batchNo">' + batchOptionsFor(products[0] && products[0].id) + '</select>')) +
-    '<label>出貨日期</label><input id="f_date" type="date" value="' + (isEdit ? existing.date : new Date().toISOString().slice(0,10)) + '">' +
+    '<label>出貨日期</label>' + dateSelectHTML('f_date', isEdit ? existing.date : new Date().toISOString().slice(0,10), false) +
     (isEdit ? ('<label>數量（不可改）</label><input type="number" value="' + existing.quantity + '" disabled>') :
       '<label>數量（庫存上限見批號旁備註）</label><input id="f_quantity" type="number">') +
     '<label>單價</label><input id="f_unitPrice" type="number" value="' + (isEdit ? existing.unitPrice : '') + '">' +
@@ -656,7 +820,7 @@ function openShipmentForm(products, customers, existing) {
   overlay.querySelector('#saveBtn').onclick = function() {
     if (isEdit) {
       var patch = {
-        date: overlay.querySelector('#f_date').value, unitPrice: overlay.querySelector('#f_unitPrice').value,
+        date: dateSelectValue('f_date'), unitPrice: overlay.querySelector('#f_unitPrice').value,
         tax: overlay.querySelector('#f_tax').value, note: overlay.querySelector('#f_note').value
       };
       callServer('updateShipment', [state.token, existing.id, patch]).then(function() { overlay.remove(); loadAll(); }).catch(function(e){alert(e.message||e);});
@@ -670,7 +834,7 @@ function openShipmentForm(products, customers, existing) {
     var data = {
       customerId: overlay.querySelector('#f_customerId').value,
       productId: overlay.querySelector('#f_productId').value,
-      date: overlay.querySelector('#f_date').value,
+      date: dateSelectValue('f_date'),
       batchNo: batchSelect.value,
       quantity: qty,
       unitPrice: overlay.querySelector('#f_unitPrice').value,
@@ -693,7 +857,7 @@ function renderInvoices(root) {
     '<table><thead><tr><th>請款單號</th><th>客戶</th><th>期間</th><th>總金額</th><th>狀態</th><th>收款日期</th><th></th></tr></thead><tbody>' +
     rows.map(function(r) {
       return '<tr><td>' + r.invoiceNo + '</td><td>' + custName(r.customerId) + '</td><td>' + r.periodStart + ' ~ ' + r.periodEnd +
-        '</td><td>' + fmt(r.totalAmount) + '</td><td>' + r.status + '</td><td>' + (r.receivedDate || '') + '</td>' +
+        '</td><td>' + fmt(r.totalAmount) + '</td><td>' + tag(r.status, INVOICE_STATUS_TAG) + '</td><td>' + (r.receivedDate || '') + '</td>' +
         '<td><button data-dl="' + r.id + '">下載Excel</button>' +
         (editable && r.status !== '已收款' ? ' <button data-received="' + r.id + '">標記已收款</button>' : '') + '</td></tr>';
     }).join('') + '</tbody></table></div>';
@@ -727,14 +891,14 @@ function openInvoiceForm(customers) {
   overlay.className = 'modal-overlay';
   overlay.innerHTML = '<div class="modal"><h3>開立請款單</h3>' +
     '<label>客戶</label><select id="f_customerId">' + customers.map(function(c){return '<option value="'+c.id+'">'+c.name+'</option>';}).join('') + '</select>' +
-    '<label>期間起</label><input id="f_start" type="date">' +
-    '<label>期間迄</label><input id="f_end" type="date">' +
+    '<label>期間起</label>' + dateSelectHTML('f_start', '', false) +
+    '<label>期間迄</label>' + dateSelectHTML('f_end', '', false) +
     '<div style="margin-top:16px;text-align:right;"><button id="cancelBtn">取消</button> <button class="primary" id="saveBtn">產生</button></div></div>';
   document.body.appendChild(overlay);
   overlay.querySelector('#cancelBtn').onclick = function() { overlay.remove(); };
   overlay.querySelector('#saveBtn').onclick = function() {
     callServer('createCustomerInvoice', [state.token, overlay.querySelector('#f_customerId').value,
-      overlay.querySelector('#f_start').value, overlay.querySelector('#f_end').value])
+      dateSelectValue('f_start'), dateSelectValue('f_end')])
       .then(function() { overlay.remove(); loadAll(); }).catch(function(e){ alert(e.message||e); });
   };
 }
@@ -826,7 +990,7 @@ function renderQcRecords(root) {
     '<p style="color:#888;font-size:12px;">檢驗紀錄不提供編輯（每筆會依範本產生多個檢驗項目，改動可能跟原始檢驗當下的範本不一致），如果填錯建議刪除重新填一筆。</p>' +
     '<table><thead><tr><th>範本</th><th>關聯批號</th><th>檢驗人</th><th>日期</th><th>結果</th>' + (editable ? '<th></th>' : '') + '</tr></thead><tbody>' +
     rows.map(function(r) {
-      return '<tr><td>' + tplName(r.templateId) + '</td><td>' + r.refBatchNo + '</td><td>' + r.inspector + '</td><td>' + r.date + '</td><td>' + r.result + '</td>' +
+      return '<tr><td>' + tplName(r.templateId) + '</td><td>' + r.refBatchNo + '</td><td>' + r.inspector + '</td><td>' + r.date + '</td><td>' + tag(r.result, QC_RESULT_TAG) + '</td>' +
         (editable ? '<td><button class="danger" data-del="' + r.id + '">刪除</button></td>' : '') + '</tr>';
     }).join('') + '</tbody></table></div>';
   document.getElementById('exportBtn').onclick = function() {
@@ -869,7 +1033,7 @@ function openQcForm(templates) {
     '<label>範本</label><select id="f_templateId">' + templates.map(function(t){return '<option value="'+t.id+'">'+t.name+'</option>';}).join('') + '</select>' +
     '<label>關聯批號</label><input id="f_refBatchNo" type="text">' +
     '<label>檢驗人</label><input id="f_inspector" type="text">' +
-    '<label>日期</label><input id="f_date" type="date" value="' + new Date().toISOString().slice(0,10) + '">' +
+    '<label>日期</label>' + dateSelectHTML('f_date', new Date().toISOString().slice(0,10), false) +
     '<div style="margin-top:12px;"><b>檢驗項目</b><div id="qcItemsWrap" style="margin-top:6px;">' +
     itemsFieldHtml(templates[0] && templates[0].id) + '</div></div>' +
     '<div style="margin-top:16px;text-align:right;"><button id="cancelBtn">取消</button> <button class="primary" id="saveBtn">儲存</button></div></div>';
@@ -888,7 +1052,7 @@ function openQcForm(templates) {
       templateId: overlay.querySelector('#f_templateId').value,
       refBatchNo: overlay.querySelector('#f_refBatchNo').value,
       inspector: overlay.querySelector('#f_inspector').value,
-      date: overlay.querySelector('#f_date').value
+      date: dateSelectValue('f_date')
     };
     callServer('addQcRecord', [state.token, record, items]).then(function() { overlay.remove(); loadAll(); }).catch(function(e){alert(e.message||e);});
   };
@@ -960,7 +1124,7 @@ function renderPettyCash(root) {
         (editable ? '<th></th>' : '') + '</tr></thead><tbody>' +
         rows.map(function(r) {
           return '<tr><td>' + r.date + '</td><td>' + r.vendor + '</td><td>' + catName(r.categoryId) + '</td><td>' + r.itemName +
-            '</td><td>' + r.direction + '</td><td>' + fmt(r.total) + '</td><td>' + fmt(r.runningBalance) + '</td>' +
+            '</td><td>' + tag(r.direction, DIRECTION_TAG) + '</td><td>' + fmt(r.total) + '</td><td>' + fmt(r.runningBalance) + '</td>' +
             (editable ? '<td><button data-edit="' + r.id + '">編輯</button> <button class="danger" data-del="' + r.id + '">刪除</button></td>' : '') + '</tr>';
         }).join('') + '</tbody></table>';
       document.getElementById('exportBtn').onclick = function() {
@@ -994,7 +1158,7 @@ function openPettyCashForm(categories, reload, existing) {
   overlay.className = 'modal-overlay';
   var isEdit = !!existing;
   overlay.innerHTML = '<div class="modal"><h3>' + (isEdit ? '編輯零用金紀錄' : '新增零用金紀錄') + '</h3>' +
-    '<label>日期</label><input id="f_date" type="date" value="' + (isEdit ? existing.date : new Date().toISOString().slice(0,10)) + '">' +
+    '<label>日期</label>' + dateSelectHTML('f_date', isEdit ? existing.date : new Date().toISOString().slice(0,10), false) +
     '<label>廠商</label><input id="f_vendor" type="text" value="' + (isEdit ? (existing.vendor||'') : '') + '">' +
     '<label>類別</label><select id="f_categoryId">' + categories.map(function(c){return '<option value="'+c.id+'"' + (isEdit && String(existing.categoryId)===String(c.id) ? ' selected' : '') + '>'+c.name+'</option>';}).join('') + '</select>' +
     '<label>品名</label><input id="f_itemName" type="text" value="' + (isEdit ? (existing.itemName||'') : '') + '">' +
@@ -1009,7 +1173,7 @@ function openPettyCashForm(categories, reload, existing) {
   overlay.querySelector('#cancelBtn').onclick = function() { overlay.remove(); };
   overlay.querySelector('#saveBtn').onclick = function() {
     var data = {
-      date: overlay.querySelector('#f_date').value, vendor: overlay.querySelector('#f_vendor').value,
+      date: dateSelectValue('f_date'), vendor: overlay.querySelector('#f_vendor').value,
       categoryId: overlay.querySelector('#f_categoryId').value, itemName: overlay.querySelector('#f_itemName').value,
       direction: overlay.querySelector('#f_direction').value, quantity: overlay.querySelector('#f_quantity').value,
       unitPrice: overlay.querySelector('#f_unitPrice').value, tax: overlay.querySelector('#f_tax').value,
@@ -1055,7 +1219,7 @@ function renderUsers(root) {
     (editable ? '<button class="primary" id="addBtn">新增使用者</button>' : '') + '</div>' +
     '<table><thead><tr><th>帳號</th><th>姓名</th><th>角色</th><th>啟用</th>' + (editable ? '<th></th>' : '') + '</tr></thead><tbody>' +
     users.map(function(u) {
-      return '<tr><td>' + u.username + '</td><td>' + u.name + '</td><td>' + u.role + '</td><td>' + (String(u.active) === 'false' ? '否' : '是') + '</td>' +
+      return '<tr><td>' + u.username + '</td><td>' + u.name + '</td><td>' + u.role + '</td><td>' + tag(String(u.active) === 'false' ? '停用' : '啟用', {'啟用': 'tag-green', '停用': 'tag-gray'}) + '</td>' +
         (editable ? '<td><button data-edit="' + u.id + '">編輯</button></td>' : '') + '</tr>';
     }).join('') +
     '</tbody></table></div>' + renderPermissionMatrix();
@@ -1109,7 +1273,8 @@ function renderPermissionMatrix() {
     modules.map(function(m) {
       return '<tr><td>' + PERMISSION_MODULE_LABELS[m] + '</td>' + roles.map(function(r) {
         var lvl = state.data.roleMatrix[m] ? state.data.roleMatrix[m][r] : 'view';
-        return '<td><button class="permCell" data-module="' + m + '" data-role="' + r + '">' + lvl + '</button></td>';
+        var lvlClass = lvl === 'edit' ? 'tag-green' : (lvl === 'view' ? 'tag-blue' : 'tag-gray');
+        return '<td><button class="permCell ' + lvlClass + '" style="border:none;" data-module="' + m + '" data-role="' + r + '">' + lvl + '</button></td>';
       }).join('') + '</tr>';
     }).join('') + '</tbody></table></div>';
 }

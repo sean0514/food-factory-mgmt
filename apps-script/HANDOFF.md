@@ -68,6 +68,26 @@
 - **CSV 匯出**：所有走 `GENERIC_PAGES` 通用列表的頁面都有「匯出CSV」按鈕
   （純前端把目前畫面資料轉 CSV 下載，不用另外呼叫後端）。
 
+## 已完成（第五輪：下拉選單連動 + 日期改成純下拉選單 + 介面美化）
+
+- **進貨單**：選「原料」會自動帶出該原料的常用供應商（`Materials.defaultSupplierId`，
+  在「原料主檔」表單新增了這個欄位，是通用列表表單引擎第一次支援 `type:'select'`
+  跨表參照欄位，見 `GENERIC_PAGES` / `openGenericForm` / `genericFieldDisplay_`）
+- **生產批次用料明細**：原本「原料批號」是自由輸入文字，改成選了原料後動態抓
+  `materialBatchStock(token, materialId)`（後端新函式，依 `InventoryLogs` 算出
+  該原料目前還有庫存的批號清單），下拉選單只列得出有庫存的批號並顯示剩餘量，
+  避免打錯字或選到已經用完的批號
+- **日期欄位全部從 `<input type="date">` 改成年/月/日三個 `<select>` 下拉選單**
+  （`dateSelectHTML(id, value, optional)` / `dateSelectValue(id)`，定義在
+  `Index.html` 前段）。原因是使用者實際部署後反映原生日期輸入框點了沒反應，
+  改成純下拉選單比較保險、不依賴瀏覽器的原生日期選擇器。**這是全站慣例**，
+  之後新增任何日期欄位都應該用這組函式，不要再用 `<input type="date">`
+- **整體視覺重新設計**：CSS 變數統一色票、側邊欄改深色現代風格、卡片加陰影、
+  表格加 hover/zebra 效果、按鈕加 hover/active 過場、彈出視窗加陰影與 focus
+  outline、新增狀態彩色標籤 `tag(text, map)`（合格/不合格、生產批次狀態、
+  請款狀態、QC 結果、零用金收支別、使用者啟用狀態、權限矩陣的 edit/view/none
+  都改用顏色標籤呈現），登入頁也重新排版
+
 ## 已完成（第四輪：編輯/刪除/CSV 全頁面補齊，含首次真實部署踩到的坑）
 
 實際走過一次從零部署（`clasp create` → `clasp push` → `clasp deploy` → 設定
