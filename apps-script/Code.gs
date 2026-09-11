@@ -253,7 +253,8 @@ var PAGE_MODULE_MAP = {
   users: 'users',
   expenseCategories: 'pettyCash',
   accountCategories: 'incomeStatement',
-  manualLedgerEntries: 'incomeStatement'
+  manualLedgerEntries: 'incomeStatement',
+  qcTemplateItems: 'qc'
 };
 
 var PERMISSION_MODULES = ['dashboard', 'inventory', 'production', 'shipping', 'billing', 'qc', 'cost', 'pettyCash', 'incomeStatement', 'users'];
@@ -554,7 +555,13 @@ function genericDelete(token, table, id) {
   return deleteObjectById_(cap_(table), id);
 }
 
-function cap_(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+// 前端傳來的 table key 是 lower-camel（例如 qcTemplates），對應到 SHEET_FIELDS 的實際表名
+// （不能單純把第一個字母大寫，因為像 QCTemplates 這種開頭是大寫縮寫的表名對不上）
+var TABLE_NAME_OVERRIDES_ = {qcTemplates: 'QCTemplates', qcTemplateItems: 'QCTemplateItems', qcRecords: 'QCRecords', qcRecordItems: 'QCRecordItems'};
+function cap_(s) {
+  if (TABLE_NAME_OVERRIDES_[s]) return TABLE_NAME_OVERRIDES_[s];
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 // ============ 原料 / 庫存 ============
 
@@ -638,6 +645,33 @@ function addProductionMaterialUsage(token, data) {
   return data;
 }
 
+function completeProductionBatch(token, batchNo) {
+  var session = requireSession_(token);
+  requireEdit_(session, 'production');
+  var batch = sheetToObjects_('ProductionBatches').filter(function(b) { return b.batchNo === batchNo; })[0];
+  if (!batch) throw new Error('找不到生產批次：' + batchNo);
+  if (batch.status === '完成') throw new Error('該批次已完成入庫，不可重複入庫');
+  var product = sheetToObjects_('Products').filter(function(p) { return String(p.id) === String(batch.productId); })[0];
+  var qty = Number(batch.actualQty) || 0;
+  if (!qty) throw new Error('實際產量為 0，請先填實際產量');
+  var expiryDate = '';
+  if (product && product.shelfLifeDays) {
+    var d = new Date(batch.date);
+    d.setDate(d.getDate() + Number(product.shelfLifeDays));
+    expiryDate = Utilities.formatDate(d, 'Asia/Taipei', 'yyyy-MM-dd');
+  }
+  var existing = sheetToObjects_('ProductInventory').filter(function(i) { return i.batchNo === batchNo && String(i.productId) === String(batch.productId); })[0];
+  if (existing) {
+    updateObjectById_('ProductInventory', existing.id, {quantity: (Number(existing.quantity) || 0) + qty});
+  } else {
+    appendObject_('ProductInventory', {
+      id: nextId_('ProductInventory'), batchNo: batchNo, productId: batch.productId,
+      quantity: qty, expiryDate: expiryDate, location: ''
+    });
+  }
+  return updateObjectById_('ProductionBatches', batch.id, {status: '完成'});
+}
+
 // ============ 成本分析 ============
 
 function materialAvgUnitPrice_(materialId, batchNo) {
@@ -703,11 +737,30 @@ function monthlyCostReport(token, month) {
 function addShipment(token, data) {
   var session = requireSession_(token);
   requireEdit_(session, 'shipping');
+  var qty = Number(data.quantity) || 0;
+  var inv = sheetToObjects_('ProductInventory').filter(function(i) {
+    return String(i.productId) === String(data.productId) && i.batchNo === data.batchNo;
+  })[0];
+  if (!inv) throw new Error('找不到該成品批號的庫存紀錄（可能尚未完成入庫）：' + data.batchNo);
+  var stockQty = Number(inv.quantity) || 0;
+  if (stockQty < qty) throw new Error('庫存不足：批號 ' + data.batchNo + ' 目前庫存 ' + stockQty + '，出貨數量 ' + qty);
   data.id = nextId_('Shipments');
   data.shipmentNo = data.shipmentNo || ('SH' + Utilities.formatDate(new Date(data.date || new Date()), 'Asia/Taipei', 'yyyyMMdd') + '-' + data.id);
-  data.amount = (Number(data.quantity) || 0) * (Number(data.unitPrice) || 0);
+  data.amount = qty * (Number(data.unitPrice) || 0);
   data.total = data.amount + (Number(data.tax) || 0);
-  return appendObject_('Shipments', data);
+  appendObject_('Shipments', data);
+  updateObjectById_('ProductInventory', inv.id, {quantity: stockQty - qty});
+  return data;
+}
+
+function productInventorySummary(token) {
+  requireSession_(token);
+  var products = sheetToObjects_('Products');
+  return sheetToObjects_('ProductInventory').map(function(i) {
+    var p = products.filter(function(x) { return String(x.id) === String(i.productId); })[0];
+    return {id: i.id, batchNo: i.batchNo, productId: i.productId, productName: p ? p.name : i.productId,
+      quantity: i.quantity, expiryDate: i.expiryDate, location: i.location};
+  });
 }
 
 // ============ 客戶請款明細 ============
@@ -790,11 +843,35 @@ function generateCustomerInvoiceXlsx(token, invoiceId) {
 
 // ============ 品質/食安 ============
 
+// 依範本項目的資料型態/標準值，判斷單一檢驗項目是否合格
+function evalQcItemPass_(dataType, spec, value) {
+  if (dataType === '合格判定') return String(value) === '合格' || value === true || value === 'true';
+  if (dataType === '數值') {
+    var v = Number(value);
+    if (isNaN(v) || !spec) return true; // 無標準值可比對時，不阻擋（視為記錄用）
+    spec = String(spec).trim();
+    var m;
+    if ((m = spec.match(/^>=\s*(-?\d+(\.\d+)?)$/))) return v >= Number(m[1]);
+    if ((m = spec.match(/^<=\s*(-?\d+(\.\d+)?)$/))) return v <= Number(m[1]);
+    if ((m = spec.match(/^>\s*(-?\d+(\.\d+)?)$/))) return v > Number(m[1]);
+    if ((m = spec.match(/^<\s*(-?\d+(\.\d+)?)$/))) return v < Number(m[1]);
+    if ((m = spec.match(/^(-?\d+(\.\d+)?)\s*[~-]\s*(-?\d+(\.\d+)?)$/))) return v >= Number(m[1]) && v <= Number(m[3]);
+    if ((m = spec.match(/^(-?\d+(\.\d+)?)$/))) return v === Number(m[1]);
+    return true;
+  }
+  return true; // 文字型項目僅記錄，不判定合格/不合格
+}
+
 function addQcRecord(token, record, items) {
   var session = requireSession_(token);
   requireEdit_(session, 'qc');
   record.id = nextId_('QCRecords');
-  var allPass = items.every(function(it) { return it.pass === true || it.pass === 'true'; });
+  var templateItems = sheetToObjects_('QCTemplateItems');
+  items.forEach(function(it) {
+    var tplItem = templateItems.filter(function(t) { return String(t.id) === String(it.templateItemId); })[0];
+    it.pass = tplItem ? evalQcItemPass_(tplItem.dataType, tplItem.spec, it.value) : (it.pass === true || it.pass === 'true');
+  });
+  var allPass = items.every(function(it) { return it.pass === true; });
   record.result = allPass ? '合格' : '不合格';
   appendObject_('QCRecords', record);
   items.forEach(function(it) {

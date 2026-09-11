@@ -59,6 +59,7 @@ var NAV = [
   {type: 'group', label: '成品與出貨', items: [
     {key: 'products', label: '成品主檔'},
     {key: 'customers', label: '客戶主檔'},
+    {key: 'productInventory', label: '成品庫存'},
     {key: 'shipments', label: '出貨單'},
     {key: 'customerInvoices', label: '客戶請款明細'}
   ]},
@@ -81,8 +82,8 @@ function pageModuleKey(page) {
   var map = {
     materials: 'inventory', suppliers: 'inventory', purchases: 'inventory',
     productionBatches: 'production', productionExpenses: 'production',
-    products: 'shipping', customers: 'shipping', shipments: 'shipping',
-    customerInvoices: 'billing', qcTemplates: 'qc', qcRecords: 'qc',
+    products: 'shipping', customers: 'shipping', shipments: 'shipping', productInventory: 'shipping',
+    customerInvoices: 'billing', qcTemplates: 'qc', qcRecords: 'qc', qcTemplateItems: 'qc',
     costAnalysis: 'cost', pettyCash: 'pettyCash', expenseCategories: 'pettyCash',
     incomeStatement: 'incomeStatement', partners: 'incomeStatement',
     accountCategories: 'incomeStatement', manualLedgerEntries: 'incomeStatement', users: 'users'
@@ -178,8 +179,6 @@ var GENERIC_PAGES = {
       {key: 'batchNo', label: '生產批號（留空＝當月共同費用）'}, {key: 'month', label: '月份 YYYY-MM'},
       {key: 'type', label: '費用類型'}, {key: 'amount', label: '金額', type: 'number'}, {key: 'note', label: '備註'}
     ]},
-  qcTemplates: {table: 'qcTemplates', title: '檢驗範本', addFn: 'genericAdd', args: ['qcTemplates'],
-    fields: [{key: 'name', label: '範本名稱'}, {key: 'appliesTo', label: '適用對象（原料/成品）'}]},
   partners: {table: 'partners', title: '合夥人設定', addFn: 'genericAdd', args: ['partners'],
     fields: [{key: 'name', label: '合夥人姓名'}, {key: 'sharePct', label: '分潤比例(%)', type: 'number'}]},
   expenseCategories: {table: 'expenseCategories', title: '零用金類別設定', addFn: 'genericAdd', args: ['expenseCategories'],
@@ -202,9 +201,11 @@ function renderPage() {
   if (!root) return;
   var page = state.page;
   if (page === 'dashboard') return renderDashboard(root);
+  if (page === 'qcTemplates') return renderQcTemplates(root);
   if (GENERIC_PAGES[page]) return renderGenericList(root, page);
   if (page === 'purchases') return renderPurchases(root);
   if (page === 'productionBatches') return renderProductionBatches(root);
+  if (page === 'productInventory') return renderProductInventory(root);
   if (page === 'shipments') return renderShipments(root);
   if (page === 'customerInvoices') return renderInvoices(root);
   if (page === 'qcRecords') return renderQcRecords(root);
@@ -217,6 +218,26 @@ function renderPage() {
 
 function fmt(n) { return (Number(n) || 0).toLocaleString(undefined, {maximumFractionDigits: 2}); }
 
+// ============ CSV 匯出（通用） ============
+function exportRowsToCsv(filename, columns, rows) {
+  var lines = [columns.map(function(c) { return c.label; }).join(',')];
+  rows.forEach(function(r) {
+    lines.push(columns.map(function(c) {
+      var v = r[c.key] === undefined || r[c.key] === null ? '' : String(r[c.key]);
+      if (v.indexOf(',') !== -1 || v.indexOf('"') !== -1 || v.indexOf('\n') !== -1) {
+        v = '"' + v.replace(/"/g, '""') + '"';
+      }
+      return v;
+    }).join(','));
+  });
+  var blob = new Blob(['﻿' + lines.join('\r\n')], {type: 'text/csv;charset=utf-8;'});
+  var url = URL.createObjectURL(blob);
+  var link = document.createElement('a');
+  link.href = url; link.download = filename;
+  document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 // ============ 通用列表 CRUD ============
 function renderGenericList(root, page) {
   var cfg = GENERIC_PAGES[page];
@@ -224,6 +245,7 @@ function renderGenericList(root, page) {
   var editable = canEdit(page);
   root.innerHTML = '<div class="card"><div class="toolbar">' +
     '<h2 style="margin:0;flex:1;">' + cfg.title + '</h2>' +
+    '<button id="exportBtn">匯出CSV</button>' +
     (editable ? '<button class="primary" id="addBtn">新增</button>' : '') +
     '</div><table><thead><tr>' +
     cfg.fields.map(function(f) { return '<th>' + f.label.split('（')[0] + '</th>'; }).join('') +
@@ -233,6 +255,9 @@ function renderGenericList(root, page) {
         (editable ? '<td><button data-edit="' + r.id + '">編輯</button> <button class="danger" data-del="' + r.id + '">刪除</button></td>' : '') +
         '</tr>';
     }).join('') + '</tbody></table></div>';
+  document.getElementById('exportBtn').onclick = function() {
+    exportRowsToCsv(cfg.title + '.csv', cfg.fields, rows);
+  };
   if (editable) {
     document.getElementById('addBtn').onclick = function() { openGenericForm(page, null); };
     root.querySelectorAll('[data-edit]').forEach(function(b) {
@@ -348,12 +373,20 @@ function renderProductionBatches(root) {
     rows.map(function(r) {
       return '<tr><td>' + r.batchNo + '</td><td>' + prodName(r.productId) + '</td><td>' + r.date + '</td><td>' + (r.line||'') +
         '</td><td>' + (r.responsible||'') + '</td><td>' + r.plannedQty + '</td><td>' + r.actualQty + '</td><td>' + r.status +
-        '</td><td>' + (editable ? '<button data-usage="' + r.batchNo + '">用料明細</button>' : '') + '</td></tr>';
+        '</td><td>' + (editable ? '<button data-usage="' + r.batchNo + '">用料明細</button> ' +
+          (r.status !== '完成' ? '<button data-complete="' + r.batchNo + '">完成入庫</button>' : '') : '') + '</td></tr>';
     }).join('') + '</tbody></table></div><div id="usagePanel"></div>';
   if (editable) {
     document.getElementById('addBtn').onclick = function() { openBatchForm(products); };
     root.querySelectorAll('[data-usage]').forEach(function(b) {
       b.onclick = function() { renderUsagePanel(b.getAttribute('data-usage')); };
+    });
+    root.querySelectorAll('[data-complete]').forEach(function(b) {
+      b.onclick = function() {
+        if (!confirm('確定完成入庫？將把該批次實際產量計入成品庫存，且無法重複入庫。')) return;
+        callServer('completeProductionBatch', [state.token, b.getAttribute('data-complete')])
+          .then(loadAll).catch(function(e) { alert(e.message || e); });
+      };
     });
   }
 }
@@ -405,6 +438,17 @@ function renderUsagePanel(batchNo) {
   }
 }
 
+// ============ 成品庫存 ============
+function renderProductInventory(root) {
+  root.innerHTML = '<div class="card"><h2>成品庫存</h2><div id="piTable">載入中...</div></div>';
+  callServer('productInventorySummary', [state.token]).then(function(rows) {
+    document.getElementById('piTable').innerHTML = '<table><thead><tr><th>成品</th><th>批號</th><th>數量</th><th>效期</th><th>儲位</th></tr></thead><tbody>' +
+      rows.map(function(r) {
+        return '<tr><td>' + r.productName + '</td><td>' + r.batchNo + '</td><td>' + r.quantity + '</td><td>' + (r.expiryDate || '') + '</td><td>' + (r.location || '') + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  });
+}
+
 // ============ 出貨單 ============
 function renderShipments(root) {
   var rows = state.data.shipments || [];
@@ -428,24 +472,38 @@ function renderShipments(root) {
 function openShipmentForm(products, customers) {
   var overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
+  var inventory = state.data.productInventory || [];
+  function batchOptionsFor(productId) {
+    var avail = inventory.filter(function(i) { return String(i.productId) === String(productId) && Number(i.quantity) > 0; });
+    if (!avail.length) return '<option value="">（無可出貨庫存，請先完成生產入庫）</option>';
+    return avail.map(function(i) { return '<option value="' + i.batchNo + '" data-stock="' + i.quantity + '">' + i.batchNo + '（庫存 ' + i.quantity + '）</option>'; }).join('');
+  }
   overlay.innerHTML = '<div class="modal"><h3>新增出貨</h3>' +
     '<label>客戶</label><select id="f_customerId">' + customers.map(function(c){return '<option value="'+c.id+'">'+c.name+'</option>';}).join('') + '</select>' +
     '<label>成品</label><select id="f_productId">' + products.map(function(p){return '<option value="'+p.id+'">'+p.name+'</option>';}).join('') + '</select>' +
+    '<label>成品批號</label><select id="f_batchNo">' + batchOptionsFor(products[0] && products[0].id) + '</select>' +
     '<label>出貨日期</label><input id="f_date" type="date" value="' + new Date().toISOString().slice(0,10) + '">' +
-    '<label>成品批號</label><input id="f_batchNo" type="text">' +
-    '<label>數量</label><input id="f_quantity" type="number">' +
+    '<label>數量（庫存上限見批號旁備註）</label><input id="f_quantity" type="number">' +
     '<label>單價</label><input id="f_unitPrice" type="number">' +
     '<label>稅金</label><input id="f_tax" type="number" value="0">' +
     '<div style="margin-top:16px;text-align:right;"><button id="cancelBtn">取消</button> <button class="primary" id="saveBtn">儲存</button></div></div>';
   document.body.appendChild(overlay);
+  overlay.querySelector('#f_productId').onchange = function(e) {
+    overlay.querySelector('#f_batchNo').innerHTML = batchOptionsFor(e.target.value);
+  };
   overlay.querySelector('#cancelBtn').onclick = function() { overlay.remove(); };
   overlay.querySelector('#saveBtn').onclick = function() {
+    var batchSelect = overlay.querySelector('#f_batchNo');
+    var chosen = batchSelect.options[batchSelect.selectedIndex];
+    var stock = chosen ? Number(chosen.getAttribute('data-stock')) || 0 : 0;
+    var qty = Number(overlay.querySelector('#f_quantity').value) || 0;
+    if (qty > stock) { alert('數量超過該批號庫存（' + stock + '）'); return; }
     var data = {
       customerId: overlay.querySelector('#f_customerId').value,
       productId: overlay.querySelector('#f_productId').value,
       date: overlay.querySelector('#f_date').value,
-      batchNo: overlay.querySelector('#f_batchNo').value,
-      quantity: overlay.querySelector('#f_quantity').value,
+      batchNo: batchSelect.value,
+      quantity: qty,
       unitPrice: overlay.querySelector('#f_unitPrice').value,
       tax: overlay.querySelector('#f_tax').value
     };
@@ -504,6 +562,71 @@ function openInvoiceForm(customers) {
   };
 }
 
+// ============ 品管檢驗範本 ============
+function renderQcTemplates(root) {
+  var templates = state.data.qcTemplates || [];
+  var items = state.data.qcTemplateItems || [];
+  var editable = canEdit('qcTemplates');
+  root.innerHTML = '<div class="card"><div class="toolbar"><h2 style="margin:0;flex:1;">檢驗範本</h2>' +
+    (editable ? '<button class="primary" id="addTplBtn">新增範本</button>' : '') + '</div>' +
+    templates.map(function(t) {
+      var tplItems = items.filter(function(i) { return String(i.templateId) === String(t.id); });
+      return '<div class="card" style="background:#f9fafb;"><b>' + t.name + '</b>（適用：' + (t.appliesTo || '') + '）' +
+        (editable ? ' <button class="danger" data-deltpl="' + t.id + '">刪除範本</button>' : '') +
+        '<table style="margin-top:8px;"><thead><tr><th>檢驗項目</th><th>標準值/規格</th><th>資料型態</th>' +
+        (editable ? '<th></th>' : '') + '</tr></thead><tbody>' +
+        tplItems.map(function(it) {
+          return '<tr><td>' + it.itemName + '</td><td>' + (it.spec || '') + '</td><td>' + it.dataType +
+            '</td>' + (editable ? '<td><button class="danger" data-delitem="' + it.id + '">刪除</button></td>' : '') + '</tr>';
+        }).join('') + '</tbody></table>' +
+        (editable ? '<div style="margin-top:8px;display:flex;gap:4px;">' +
+          '<input placeholder="項目名稱" class="ni_name" style="flex:1;">' +
+          '<input placeholder="標準值/規格，例如 >=100 或 5-10" class="ni_spec" style="flex:1;">' +
+          '<select class="ni_type"><option value="數值">數值</option><option value="合格判定">合格判定</option><option value="文字">文字</option></select>' +
+          '<button data-additem="' + t.id + '">新增項目</button></div>' : '') +
+        '</div>';
+    }).join('') + '</div>';
+  if (editable) {
+    document.getElementById('addTplBtn').onclick = function() { openTemplateForm(); };
+    root.querySelectorAll('[data-deltpl]').forEach(function(b) {
+      b.onclick = function() {
+        if (!confirm('刪除範本會保留已產生的檢驗紀錄，但範本本身無法復原，確定？')) return;
+        callServer('genericDelete', [state.token, 'qcTemplates', b.getAttribute('data-deltpl')]).then(loadAll);
+      };
+    });
+    root.querySelectorAll('[data-delitem]').forEach(function(b) {
+      b.onclick = function() { callServer('genericDelete', [state.token, 'qcTemplateItems', b.getAttribute('data-delitem')]).then(loadAll); };
+    });
+    root.querySelectorAll('[data-additem]').forEach(function(b) {
+      b.onclick = function() {
+        var wrap = b.parentElement;
+        var data = {
+          templateId: b.getAttribute('data-additem'),
+          itemName: wrap.querySelector('.ni_name').value,
+          spec: wrap.querySelector('.ni_spec').value,
+          dataType: wrap.querySelector('.ni_type').value
+        };
+        if (!data.itemName) { alert('請輸入項目名稱'); return; }
+        callServer('genericAdd', [state.token, 'qcTemplateItems', data]).then(loadAll);
+      };
+    });
+  }
+}
+function openTemplateForm() {
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = '<div class="modal"><h3>新增檢驗範本</h3>' +
+    '<label>範本名稱</label><input id="f_name" type="text">' +
+    '<label>適用對象</label><select id="f_appliesTo"><option value="原料">原料</option><option value="成品">成品</option></select>' +
+    '<div style="margin-top:16px;text-align:right;"><button id="cancelBtn">取消</button> <button class="primary" id="saveBtn">儲存</button></div></div>';
+  document.body.appendChild(overlay);
+  overlay.querySelector('#cancelBtn').onclick = function() { overlay.remove(); };
+  overlay.querySelector('#saveBtn').onclick = function() {
+    var data = {name: overlay.querySelector('#f_name').value, appliesTo: overlay.querySelector('#f_appliesTo').value};
+    callServer('genericAdd', [state.token, 'qcTemplates', data]).then(function() { overlay.remove(); loadAll(); }).catch(function(e){alert(e.message||e);});
+  };
+}
+
 // ============ 品管檢驗紀錄 ============
 function renderQcRecords(root) {
   var rows = state.data.qcRecords || [];
@@ -523,36 +646,43 @@ function renderQcRecords(root) {
 function openQcForm(templates) {
   var overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
-  var itemsHtml = '<div id="qcItemsWrap"></div><button type="button" id="addItemBtn">新增檢驗項目</button>';
+  var allItems = state.data.qcTemplateItems || [];
+  function itemsFieldHtml(templateId) {
+    var tplItems = allItems.filter(function(i) { return String(i.templateId) === String(templateId); });
+    if (!tplItems.length) return '<p style="color:#888;">此範本尚未設定檢驗項目，請先到「檢驗範本」頁面新增。</p>';
+    return tplItems.map(function(it) {
+      var inputHtml;
+      if (it.dataType === '合格判定') {
+        inputHtml = '<select class="qc_item_value" data-tplitem="' + it.id + '"><option value="合格">合格</option><option value="不合格">不合格</option></select>';
+      } else if (it.dataType === '數值') {
+        inputHtml = '<input type="number" class="qc_item_value" data-tplitem="' + it.id + '" placeholder="標準：' + (it.spec || '不限') + '">';
+      } else {
+        inputHtml = '<input type="text" class="qc_item_value" data-tplitem="' + it.id + '">';
+      }
+      return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">' +
+        '<span style="flex:1;">' + it.itemName + (it.spec ? '（' + it.spec + '）' : '') + '</span>' +
+        '<span style="flex:1;">' + inputHtml + '</span></div>';
+    }).join('');
+  }
   overlay.innerHTML = '<div class="modal"><h3>新增檢驗紀錄</h3>' +
     '<label>範本</label><select id="f_templateId">' + templates.map(function(t){return '<option value="'+t.id+'">'+t.name+'</option>';}).join('') + '</select>' +
     '<label>關聯批號</label><input id="f_refBatchNo" type="text">' +
     '<label>檢驗人</label><input id="f_inspector" type="text">' +
     '<label>日期</label><input id="f_date" type="date" value="' + new Date().toISOString().slice(0,10) + '">' +
-    '<div style="margin-top:12px;"><b>檢驗項目</b>' + itemsHtml + '</div>' +
+    '<div style="margin-top:12px;"><b>檢驗項目</b><div id="qcItemsWrap" style="margin-top:6px;">' +
+    itemsFieldHtml(templates[0] && templates[0].id) + '</div></div>' +
     '<div style="margin-top:16px;text-align:right;"><button id="cancelBtn">取消</button> <button class="primary" id="saveBtn">儲存</button></div></div>';
   document.body.appendChild(overlay);
-  function addItemRow() {
-    var wrap = overlay.querySelector('#qcItemsWrap');
-    var row = document.createElement('div');
-    row.style = 'display:flex;gap:4px;margin-bottom:4px;';
-    row.innerHTML = '<input placeholder="項目名稱" class="qc_item_name" style="flex:1;">' +
-      '<input placeholder="實際值" class="qc_item_value" style="flex:1;">' +
-      '<select class="qc_item_pass"><option value="true">合格</option><option value="false">不合格</option></select>';
-    wrap.appendChild(row);
-  }
-  addItemRow();
-  overlay.querySelector('#addItemBtn').onclick = addItemRow;
+  overlay.querySelector('#f_templateId').onchange = function(e) {
+    overlay.querySelector('#qcItemsWrap').innerHTML = itemsFieldHtml(e.target.value);
+  };
   overlay.querySelector('#cancelBtn').onclick = function() { overlay.remove(); };
   overlay.querySelector('#saveBtn').onclick = function() {
     var items = [];
-    overlay.querySelectorAll('#qcItemsWrap > div').forEach(function(row) {
-      items.push({
-        itemName: row.querySelector('.qc_item_name').value,
-        value: row.querySelector('.qc_item_value').value,
-        pass: row.querySelector('.qc_item_pass').value === 'true'
-      });
+    overlay.querySelectorAll('.qc_item_value').forEach(function(el) {
+      items.push({templateItemId: el.getAttribute('data-tplitem'), value: el.value});
     });
+    if (!items.length) { alert('此範本沒有檢驗項目，無法送出'); return; }
     var record = {
       templateId: overlay.querySelector('#f_templateId').value,
       refBatchNo: overlay.querySelector('#f_refBatchNo').value,
@@ -566,12 +696,15 @@ function openQcForm(templates) {
 // ============ 成本分析 ============
 function renderCostAnalysis(root) {
   var month = (root.dataset && root.dataset.month) || new Date().toISOString().slice(0,7);
-  root.innerHTML = '<div class="card"><h2>成本分析</h2>' +
+  var materials = state.data.materials || [];
+  root.innerHTML = '<div class="card"><h2>成本分析 — 月度批次成本</h2>' +
     '<label>月份</label><input type="month" id="costMonth" value="' + month + '">' +
-    '<div id="costReport" style="margin-top:12px;"></div></div>';
+    '<div id="costReport" style="margin-top:12px;"></div></div>' +
+    '<div class="card"><h2>原料成本波動追蹤</h2>' +
+    '<label>原料</label><select id="trendMaterial">' + materials.map(function(m){return '<option value="'+m.id+'">'+m.name+'</option>';}).join('') + '</select>' +
+    '<div id="trendReport" style="margin-top:12px;"></div></div>';
   function load(m) {
     callServer('monthlyCostReport', [state.token, m]).then(function(res) {
-      var products = state.data.products || [];
       var el = document.getElementById('costReport');
       el.innerHTML = '<table><thead><tr><th>批號</th><th>原料成本</th><th>直接費用</th><th>分攤共同費用</th><th>總成本</th><th>實際產量</th><th>單位成本</th><th>售價</th><th>單位毛利</th></tr></thead><tbody>' +
         res.rows.map(function(r) {
@@ -582,8 +715,24 @@ function renderCostAnalysis(root) {
         '，總成本：' + fmt(res.totals.totalCost) + '</p>';
     });
   }
+  function loadTrend(materialId) {
+    callServer('materialPriceTrend', [state.token, materialId]).then(function(rows) {
+      var el = document.getElementById('trendReport');
+      if (!rows.length) { el.innerHTML = '<p style="color:#888;">此原料尚無進貨紀錄</p>'; return; }
+      var prices = rows.map(function(r) { return r.unitPrice; });
+      var min = Math.min.apply(null, prices), max = Math.max.apply(null, prices);
+      var last = prices[prices.length - 1];
+      var changeNote = prices.length > 1 ? ((last - prices[prices.length - 2]) >= 0 ? '↑ 較上次進貨上漲' : '↓ 較上次進貨下跌') : '';
+      el.innerHTML = '<p>歷史最低 ' + fmt(min) + '　最高 ' + fmt(max) + '　最近一次 ' + fmt(last) + ' ' + changeNote + '</p>' +
+        '<table><thead><tr><th>進貨日期</th><th>進貨單號</th><th>批號</th><th>單價</th></tr></thead><tbody>' +
+        rows.map(function(r) { return '<tr><td>' + r.date + '</td><td>' + r.purchaseNo + '</td><td>' + r.batchNo + '</td><td>' + fmt(r.unitPrice) + '</td></tr>'; }).join('') +
+        '</tbody></table>';
+    });
+  }
   document.getElementById('costMonth').onchange = function(e) { load(e.target.value); };
+  document.getElementById('trendMaterial').onchange = function(e) { loadTrend(e.target.value); };
   load(month);
+  if (materials.length) loadTrend(materials[0].id);
 }
 
 // ============ 零用金對帳 ============
