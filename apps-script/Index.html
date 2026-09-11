@@ -875,30 +875,46 @@ function renderUsers(root) {
   var editable = canEdit('users');
   root.innerHTML = '<div class="card"><div class="toolbar"><h2 style="margin:0;flex:1;">使用人員</h2>' +
     (editable ? '<button class="primary" id="addBtn">新增使用者</button>' : '') + '</div>' +
-    '<table><thead><tr><th>帳號</th><th>姓名</th><th>角色</th><th>啟用</th></tr></thead><tbody>' +
-    users.map(function(u) { return '<tr><td>' + u.username + '</td><td>' + u.name + '</td><td>' + u.role + '</td><td>' + u.active + '</td></tr>'; }).join('') +
+    '<table><thead><tr><th>帳號</th><th>姓名</th><th>角色</th><th>啟用</th>' + (editable ? '<th></th>' : '') + '</tr></thead><tbody>' +
+    users.map(function(u) {
+      return '<tr><td>' + u.username + '</td><td>' + u.name + '</td><td>' + u.role + '</td><td>' + (String(u.active) === 'false' ? '否' : '是') + '</td>' +
+        (editable ? '<td><button data-edit="' + u.id + '">編輯</button></td>' : '') + '</tr>';
+    }).join('') +
     '</tbody></table></div>' + renderPermissionMatrix();
   if (editable) {
-    document.getElementById('addBtn').onclick = openUserForm;
+    document.getElementById('addBtn').onclick = function() { openUserForm(null); };
+    root.querySelectorAll('[data-edit]').forEach(function(b) {
+      b.onclick = function() { openUserForm(users.filter(function(u) { return String(u.id) === b.getAttribute('data-edit'); })[0]); };
+    });
     wirePermissionMatrix();
   }
 }
-function openUserForm() {
+function openUserForm(existing) {
   var overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   var roles = ['系統管理員', '廠長主管', '倉管人員', '產線人員', '品管人員', '業務出貨人員', '會計人員'];
-  overlay.innerHTML = '<div class="modal"><h3>新增使用者</h3>' +
-    '<label>帳號</label><input id="f_username" type="text">' +
-    '<label>密碼</label><input id="f_password" type="text">' +
-    '<label>姓名</label><input id="f_name" type="text">' +
-    '<label>角色</label><select id="f_role">' + roles.map(function(r){return '<option>'+r+'</option>';}).join('') + '</select>' +
+  var isEdit = !!existing;
+  overlay.innerHTML = '<div class="modal"><h3>' + (isEdit ? '編輯使用者：' + existing.username : '新增使用者') + '</h3>' +
+    (isEdit ? '' : '<label>帳號</label><input id="f_username" type="text">') +
+    '<label>' + (isEdit ? '新密碼（留空表示不改密碼）' : '密碼') + '</label><input id="f_password" type="text">' +
+    '<label>姓名</label><input id="f_name" type="text" value="' + (existing ? existing.name : '') + '">' +
+    '<label>角色</label><select id="f_role">' + roles.map(function(r){return '<option' + (existing && existing.role === r ? ' selected' : '') + '>'+r+'</option>';}).join('') + '</select>' +
+    (isEdit ? '<label><input type="checkbox" id="f_active" style="width:auto;" ' + (String(existing.active) === 'false' ? '' : 'checked') + '> 啟用此帳號' : '') +
     '<div style="margin-top:16px;text-align:right;"><button id="cancelBtn">取消</button> <button class="primary" id="saveBtn">儲存</button></div></div>';
   document.body.appendChild(overlay);
   overlay.querySelector('#cancelBtn').onclick = function() { overlay.remove(); };
   overlay.querySelector('#saveBtn').onclick = function() {
-    var data = {username: overlay.querySelector('#f_username').value, password: overlay.querySelector('#f_password').value,
-      name: overlay.querySelector('#f_name').value, role: overlay.querySelector('#f_role').value};
-    callServer('addUser', [state.token, data]).then(function() { overlay.remove(); loadAll(); }).catch(function(e){alert(e.message||e);});
+    var password = overlay.querySelector('#f_password').value;
+    if (isEdit) {
+      var data = {name: overlay.querySelector('#f_name').value, role: overlay.querySelector('#f_role').value,
+        active: overlay.querySelector('#f_active').checked};
+      if (password) data.password = password;
+      callServer('updateUser', [state.token, existing.id, data]).then(function() { overlay.remove(); loadAll(); }).catch(function(e){alert(e.message||e);});
+    } else {
+      var data = {username: overlay.querySelector('#f_username').value, password: password,
+        name: overlay.querySelector('#f_name').value, role: overlay.querySelector('#f_role').value};
+      callServer('addUser', [state.token, data]).then(function() { overlay.remove(); loadAll(); }).catch(function(e){alert(e.message||e);});
+    }
   };
 }
 var PERMISSION_MODULE_LABELS = {

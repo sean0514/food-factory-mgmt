@@ -147,6 +147,20 @@ test('零用金餘額＝收入累計－支出累計', () => {
   assert.strictEqual(rows[rows.length - 1].runningBalance, manualBalance);
 });
 
+console.log('使用人員：更新密碼／停用帳號');
+test('updateUser 可以改密碼且新密碼能登入、舊密碼失效', () => {
+  const u = sandbox.addUser(token, {username: 'tester', password: 'old-pw', name: '測試員', role: '倉管人員'});
+  sandbox.updateUser(token, u.id, {name: '測試員', role: '倉管人員', active: true, password: 'new-pw'});
+  assert.throws(() => sandbox.login('tester', 'old-pw'), /帳號或密碼錯誤/);
+  assert.ok(sandbox.login('tester', 'new-pw').token);
+});
+test('updateUser 停用帳號後無法登入', () => {
+  const u = sandbox.addUser(token, {username: 'tobedeactivated', password: 'pw', name: '停用測試', role: '倉管人員'});
+  assert.ok(sandbox.login('tobedeactivated', 'pw').token);
+  sandbox.updateUser(token, u.id, {name: '停用測試', role: '倉管人員', active: false});
+  assert.throws(() => sandbox.login('tobedeactivated', 'pw'), /帳號或密碼錯誤/);
+});
+
 console.log('通用 CRUD 表名解析（迴歸測試：QC* 開頭大寫縮寫表名）');
 test('genericAdd/Delete 對 qcTemplates 正常運作（不會因表名轉換錯誤而找不到分頁）', () => {
   const tpl = sandbox.genericAdd(token, 'qcTemplates', {name: '測試範本', appliesTo: '原料'});
