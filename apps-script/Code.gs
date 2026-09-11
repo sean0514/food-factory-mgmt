@@ -589,6 +589,21 @@ function addPurchase(token, data) {
   return data;
 }
 
+// 只允許改「不影響庫存/成本連動」的欄位（數量/原料/供應商要改的話請刪除重建，
+// 避免跟已經寫入的 InventoryLogs 入庫紀錄對不起來）
+function updatePurchase(token, id, data) {
+  var session = requireSession_(token);
+  requireEdit_(session, 'inventory');
+  var existing = sheetToObjects_('Purchases').filter(function(p) { return String(p.id) === String(id); })[0];
+  if (!existing) throw new Error('找不到進貨紀錄');
+  var patch = {
+    date: data.date, batchNo: data.batchNo, unitPrice: data.unitPrice,
+    expiryDate: data.expiryDate, inspectionStatus: data.inspectionStatus, note: data.note
+  };
+  patch.amount = (Number(existing.quantity) || 0) * (Number(data.unitPrice) || 0);
+  return updateObjectById_('Purchases', id, patch);
+}
+
 function materialStock_(materialId) {
   var logs = sheetToObjects_('InventoryLogs').filter(function(l) { return String(l.materialId) === String(materialId); });
   var qty = 0;
@@ -652,6 +667,27 @@ function addProductionMaterialUsage(token, data) {
     operator: session.name, note: '生產用料'
   });
   return data;
+}
+
+function updateProductionBatch(token, id, data) {
+  var session = requireSession_(token);
+  requireEdit_(session, 'production');
+  var existing = sheetToObjects_('ProductionBatches').filter(function(b) { return String(b.id) === String(id); })[0];
+  if (!existing) throw new Error('找不到生產批次');
+  if (existing.status === '完成') throw new Error('已完成入庫的批次不可編輯（實際產量已經計入成品庫存），如需更正請調整成品庫存或聯絡系統管理員');
+  return updateObjectById_('ProductionBatches', id, {
+    date: data.date, line: data.line, responsible: data.responsible,
+    plannedQty: data.plannedQty, actualQty: data.actualQty
+  });
+}
+
+function deleteProductionBatch(token, id) {
+  var session = requireSession_(token);
+  requireEdit_(session, 'production');
+  var existing = sheetToObjects_('ProductionBatches').filter(function(b) { return String(b.id) === String(id); })[0];
+  if (!existing) return false;
+  if (existing.status === '完成') throw new Error('已完成入庫的批次不可刪除（實際產量已經計入成品庫存）');
+  return deleteObjectById_('ProductionBatches', id);
 }
 
 function completeProductionBatch(token, batchNo) {
@@ -760,6 +796,36 @@ function addShipment(token, data) {
   appendObject_('Shipments', data);
   updateObjectById_('ProductInventory', inv.id, {quantity: stockQty - qty});
   return data;
+}
+
+// 只允許改單價/稅金/日期/備註（數量/客戶/成品/批號要改的話請刪除重建，避免跟已經
+// 扣掉的成品庫存對不起來）
+function updateShipment(token, id, data) {
+  var session = requireSession_(token);
+  requireEdit_(session, 'shipping');
+  var existing = sheetToObjects_('Shipments').filter(function(s) { return String(s.id) === String(id); })[0];
+  if (!existing) throw new Error('找不到出貨紀錄');
+  var amount = (Number(existing.quantity) || 0) * (Number(data.unitPrice) || 0);
+  return updateObjectById_('Shipments', id, {
+    date: data.date, unitPrice: data.unitPrice, tax: data.tax, note: data.note,
+    amount: amount, total: amount + (Number(data.tax) || 0)
+  });
+}
+
+// 刪除出貨單並把數量還原回成品庫存
+function deleteShipment(token, id) {
+  var session = requireSession_(token);
+  requireEdit_(session, 'shipping');
+  var existing = sheetToObjects_('Shipments').filter(function(s) { return String(s.id) === String(id); })[0];
+  if (!existing) return false;
+  if (existing.invoiceId) throw new Error('這筆出貨已經開立請款單，不可刪除；如需作廢請先處理請款單');
+  var inv = sheetToObjects_('ProductInventory').filter(function(i) {
+    return String(i.productId) === String(existing.productId) && i.batchNo === existing.batchNo;
+  })[0];
+  if (inv) {
+    updateObjectById_('ProductInventory', inv.id, {quantity: (Number(inv.quantity) || 0) + (Number(existing.quantity) || 0)});
+  }
+  return deleteObjectById_('Shipments', id);
 }
 
 function productInventorySummary(token) {
@@ -933,6 +999,20 @@ function addPettyCashTransaction(token, data) {
     data.linkedPurchaseId = purchase.id;
   }
   return appendObject_('PettyCashTransactions', data);
+}
+
+// 編輯不會回頭調整已經連動建立的 Purchases/InventoryLogs（如果這筆有連動原料庫存），
+// 只更新零用金這筆紀錄本身；如果數量/單價/類別需要改到會影響庫存的地步，建議刪除重建
+function updatePettyCashTransaction(token, id, data) {
+  var session = requireSession_(token);
+  requireEdit_(session, 'pettyCash');
+  var amount = (Number(data.quantity) || 0) * (Number(data.unitPrice) || 0);
+  return updateObjectById_('PettyCashTransactions', id, {
+    date: data.date, vendor: data.vendor, categoryId: data.categoryId, itemName: data.itemName,
+    direction: data.direction, quantity: data.quantity, unitPrice: data.unitPrice, tax: data.tax,
+    amount: amount, total: amount + (Number(data.tax) || 0),
+    paymentMethod: data.paymentMethod, invoiceDate: data.invoiceDate, remittanceDate: data.remittanceDate, note: data.note
+  });
 }
 
 // ============ 損益表 ============

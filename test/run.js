@@ -147,6 +147,43 @@ test('零用金餘額＝收入累計－支出累計', () => {
   assert.strictEqual(rows[rows.length - 1].runningBalance, manualBalance);
 });
 
+console.log('編輯/刪除功能');
+test('updatePurchase 只改允許欄位，重算金額，不動數量', () => {
+  const p = sandbox.addPurchase(token, {supplierId: supplierId, materialId: materialId, date: '2026-05-01', batchNo: 'EDITME', quantity: 3, unitPrice: 10});
+  const updated = sandbox.updatePurchase(token, p.id, {date: '2026-05-02', batchNo: 'EDITME2', unitPrice: 20, expiryDate: '', inspectionStatus: '合格', note: 'x'});
+  assert.strictEqual(updated.amount, 60); // 3 * 20，數量沒變
+  assert.strictEqual(updated.batchNo, 'EDITME2');
+});
+test('已完成入庫的生產批次不可編輯/刪除，未完成的可以', () => {
+  const productId = sandbox.genericAdd(token, 'products', {name: '編輯測試成品', price: 10}).id;
+  const batch = sandbox.addProductionBatch(token, {productId: productId, date: '2026-05-01', actualQty: 5});
+  sandbox.updateProductionBatch(token, batch.id, {date: '2026-05-02', line: 'A線', responsible: '小明', plannedQty: 5, actualQty: 6});
+  sandbox.completeProductionBatch(token, batch.batchNo);
+  assert.throws(() => sandbox.updateProductionBatch(token, batch.id, {actualQty: 999}), /已完成入庫/);
+  assert.throws(() => sandbox.deleteProductionBatch(token, batch.id), /已完成入庫/);
+});
+test('deleteShipment 會把數量還原回成品庫存；已請款的出貨不可刪除', () => {
+  const productId = sandbox.genericAdd(token, 'products', {name: '刪除測試成品', price: 10}).id;
+  const customerId = sandbox.genericAdd(token, 'customers', {name: '刪除測試客戶'}).id;
+  const batch = sandbox.addProductionBatch(token, {productId: productId, date: '2026-05-01', actualQty: 10});
+  sandbox.completeProductionBatch(token, batch.batchNo);
+  const shipment = sandbox.addShipment(token, {customerId: customerId, productId: productId, batchNo: batch.batchNo, date: '2026-05-02', quantity: 4, unitPrice: 10, tax: 0});
+  sandbox.deleteShipment(token, shipment.id);
+  const inv = sandbox.productInventorySummary(token).filter(i => i.batchNo === batch.batchNo)[0];
+  assert.strictEqual(inv.quantity, 10); // 還原回原本的 10
+  const shipment2 = sandbox.addShipment(token, {customerId: customerId, productId: productId, batchNo: batch.batchNo, date: '2026-05-03', quantity: 2, unitPrice: 10, tax: 0});
+  sandbox.createCustomerInvoice(token, customerId, '2026-05-01', '2026-05-31');
+  const reloaded = sandbox.sheetToObjects_('Shipments').filter(s => String(s.id) === String(shipment2.id))[0];
+  assert.ok(reloaded.invoiceId, '應該已經被請款單關聯');
+  assert.throws(() => sandbox.deleteShipment(token, shipment2.id), /已經開立請款單/);
+});
+test('updatePettyCashTransaction 重算金額', () => {
+  const catId = sandbox.genericAdd(token, 'expenseCategories', {name: '雜項', linkInventory: 'false'}).id;
+  const tx = sandbox.addPettyCashTransaction(token, {date: '2026-05-01', vendor: 'X店', categoryId: catId, itemName: '文具', direction: '支出', quantity: 2, unitPrice: 10, tax: 0, paymentMethod: '現金'});
+  const updated = sandbox.updatePettyCashTransaction(token, tx.id, {date: '2026-05-01', vendor: 'X店', categoryId: catId, itemName: '文具', direction: '支出', quantity: 2, unitPrice: 15, tax: 0, paymentMethod: '現金'});
+  assert.strictEqual(updated.total, 30);
+});
+
 console.log('使用人員：更新密碼／停用帳號');
 test('updateUser 可以改密碼且新密碼能登入、舊密碼失效', () => {
   const u = sandbox.addUser(token, {username: 'tester', password: 'old-pw', name: '測試員', role: '倉管人員'});
