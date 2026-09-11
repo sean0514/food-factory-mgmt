@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "Microsoft JhengHei", Arial, sans-serif; margin: 0; background: #f4f5f7; color: #222; }
+  #app { display: flex; min-height: 100vh; }
+  #sidebar { width: 220px; background: #1f2937; color: #fff; padding: 16px 0; flex-shrink: 0; }
+  #sidebar h1 { font-size: 16px; padding: 0 16px 16px; border-bottom: 1px solid #374151; margin: 0 0 8px; }
+  #sidebar a { display: block; color: #d1d5db; text-decoration: none; padding: 8px 16px; cursor: pointer; font-size: 14px; }
+  #sidebar a:hover, #sidebar a.active { background: #374151; color: #fff; }
+  #sidebar .group-title { padding: 8px 16px 4px; font-size: 12px; color: #9ca3af; margin-top: 8px; }
+  #main { flex: 1; padding: 20px; overflow-x: auto; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; background: #fff; }
+  th, td { border: 1px solid #e5e7eb; padding: 6px 10px; font-size: 13px; text-align: left; }
+  th { background: #f3f4f6; }
+  button { cursor: pointer; padding: 6px 12px; border-radius: 4px; border: 1px solid #d1d5db; background: #fff; font-size: 13px; }
+  button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+  button.danger { background: #dc2626; color: #fff; border-color: #dc2626; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  .modal { background: #fff; border-radius: 6px; padding: 20px; width: 480px; max-height: 85vh; overflow-y: auto; }
+  .modal label { display: block; font-size: 13px; margin: 8px 0 2px; }
+  .modal input, .modal select, .modal textarea { width: 100%; padding: 6px; border: 1px solid #d1d5db; border-radius: 4px; }
+  .card { background: #fff; border-radius: 6px; padding: 16px; margin-bottom: 16px; }
+  .cards { display: flex; gap: 12px; flex-wrap: wrap; }
+  .stat { background: #fff; border-radius: 6px; padding: 16px; min-width: 160px; }
+  .stat .num { font-size: 22px; font-weight: bold; }
+  .login-box { max-width: 320px; margin: 100px auto; background: #fff; padding: 24px; border-radius: 6px; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+  input[type=text], input[type=search] { padding: 6px; border: 1px solid #d1d5db; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+var state = { token: null, user: null, permissions: {}, data: {}, page: 'dashboard' };
+
+function callServer(fnName, args) {
+  return new Promise(function(resolve, reject) {
+    var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(function(e) { reject(e); });
+    runner[fnName].apply(runner, args || []);
+  });
+}
+
+var NAV = [
+  {key: 'dashboard', label: '儀表板'},
+  {type: 'group', label: '原料與庫存', items: [
+    {key: 'materials', label: '原料主檔'},
+    {key: 'suppliers', label: '供應商'},
+    {key: 'purchases', label: '進貨單'}
+  ]},
+  {type: 'group', label: '生產管理', items: [
+    {key: 'productionBatches', label: '生產批次'},
+    {key: 'productionExpenses', label: '生產費用'}
+  ]},
+  {type: 'group', label: '成品與出貨', items: [
+    {key: 'products', label: '成品主檔'},
+    {key: 'customers', label: '客戶主檔'},
+    {key: 'shipments', label: '出貨單'},
+    {key: 'customerInvoices', label: '客戶請款明細'}
+  ]},
+  {type: 'group', label: '品質/食安', items: [
+    {key: 'qcTemplates', label: '檢驗範本'},
+    {key: 'qcRecords', label: '檢驗紀錄'}
+  ]},
+  {key: 'costAnalysis', label: '成本分析'},
+  {key: 'pettyCash', label: '零用金對帳'},
+  {type: 'group', label: '損益表', items: [
+    {key: 'incomeStatement', label: '損益表'},
+    {key: 'accountCategories', label: '科目設定'},
+    {key: 'manualLedgerEntries', label: '手動分類帳'},
+    {key: 'partners', label: '合夥人設定'}
+  ]},
+  {key: 'users', label: '使用人員'}
+];
+
+function pageModuleKey(page) {
+  var map = {
+    materials: 'inventory', suppliers: 'inventory', purchases: 'inventory',
+    productionBatches: 'production', productionExpenses: 'production',
+    products: 'shipping', customers: 'shipping', shipments: 'shipping',
+    customerInvoices: 'billing', qcTemplates: 'qc', qcRecords: 'qc',
+    costAnalysis: 'cost', pettyCash: 'pettyCash', expenseCategories: 'pettyCash',
+    incomeStatement: 'incomeStatement', partners: 'incomeStatement',
+    accountCategories: 'incomeStatement', manualLedgerEntries: 'incomeStatement', users: 'users'
+  };
+  return map[page] || page;
+}
+function canView(page) { return ['edit','view'].indexOf(state.permissions[pageModuleKey(page)]) !== -1; }
+function canEdit(page) { return state.permissions[pageModuleKey(page)] === 'edit'; }
+
+function render() {
+  var app = document.getElementById('app');
+  if (!state.token) { app.innerHTML = renderLogin(); wireLogin(); return; }
+  app.innerHTML = renderShell();
+  wireShell();
+}
+
+function renderLogin() {
+  return '<div class="login-box"><h2>食品工廠管理系統</h2>' +
+    '<label>帳號</label><input id="loginUser" type="text">' +
+    '<label>密碼</label><input id="loginPass" type="password">' +
+    '<div id="loginErr" style="color:#dc2626;font-size:13px;margin-top:6px;"></div>' +
+    '<button class="primary" id="loginBtn" style="margin-top:12px;width:100%;">登入</button></div>';
+}
+function wireLogin() {
+  document.getElementById('loginBtn').onclick = function() {
+    var u = document.getElementById('loginUser').value;
+    var p = document.getElementById('loginPass').value;
+    callServer('login', [u, p]).then(function(res) {
+      state.token = res.token; state.user = res.user;
+      loadAll();
+    }).catch(function(e) { document.getElementById('loginErr').innerText = e.message || e; });
+  };
+}
+
+function loadAll() {
+  return callServer('getAllData', [state.token]).then(function(d) {
+    state.permissions = d.permissions;
+    state.data = d;
+    render();
+  });
+}
+
+function renderShell() {
+  var navHtml = NAV.map(function(item) {
+    if (item.type === 'group') {
+      var visible = item.items.filter(function(i) { return canView(i.key); });
+      if (!visible.length) return '';
+      return '<div class="group-title">' + item.label + '</div>' +
+        visible.map(function(i) {
+          return '<a data-page="' + i.key + '" class="' + (state.page === i.key ? 'active' : '') + '">' + i.label + '</a>';
+        }).join('');
+    }
+    if (!canView(item.key)) return '';
+    return '<a data-page="' + item.key + '" class="' + (state.page === item.key ? 'active' : '') + '">' + item.label + '</a>';
+  }).join('');
+  return '<div id="sidebar"><h1>食品工廠管理系統</h1>' + navHtml + '</div>' +
+    '<div id="main"><div class="topbar"><div>登入者：' + state.user.name + '（' + state.user.role + '）</div>' +
+    '<button id="logoutBtn">登出</button></div><div id="pageRoot"></div></div>';
+}
+
+function wireShell() {
+  document.querySelectorAll('#sidebar a').forEach(function(a) {
+    a.onclick = function() { state.page = a.getAttribute('data-page'); render(); renderPage(); };
+  });
+  document.getElementById('logoutBtn').onclick = function() { state.token = null; render(); };
+  renderPage();
+}
+
+// ============ 通用列表頁設定 ============
+var GENERIC_PAGES = {
+  materials: {table: 'materials', title: '原料主檔', addFn: 'genericAdd', args: ['materials'],
+    fields: [
+      {key: 'name', label: '原料名稱'}, {key: 'category', label: '分類'}, {key: 'unit', label: '單位'},
+      {key: 'safetyStock', label: '安全庫存量', type: 'number'}, {key: 'storageCondition', label: '儲存條件'}, {key: 'note', label: '備註'}
+    ]},
+  suppliers: {table: 'suppliers', title: '供應商', addFn: 'genericAdd', args: ['suppliers'],
+    fields: [
+      {key: 'name', label: '供應商名稱'}, {key: 'contact', label: '聯絡人'}, {key: 'phone', label: '電話'},
+      {key: 'address', label: '地址'}, {key: 'taxId', label: '統編'}
+    ]},
+  products: {table: 'products', title: '成品主檔', addFn: 'genericAdd', args: ['products'],
+    fields: [
+      {key: 'name', label: '品名'}, {key: 'spec', label: '規格'}, {key: 'unit', label: '單位'},
+      {key: 'shelfLifeDays', label: '保存期限(天)', type: 'number'}, {key: 'price', label: '售價', type: 'number'}
+    ]},
+  customers: {table: 'customers', title: '客戶主檔', addFn: 'genericAdd', args: ['customers'],
+    fields: [
+      {key: 'name', label: '客戶名稱'}, {key: 'contact', label: '聯絡人'}, {key: 'phone', label: '電話'},
+      {key: 'address', label: '地址'}, {key: 'taxId', label: '統編'}
+    ]},
+  productionExpenses: {table: 'productionExpenses', title: '生產費用', addFn: 'genericAdd', args: ['productionExpenses'],
+    fields: [
+      {key: 'batchNo', label: '生產批號（留空＝當月共同費用）'}, {key: 'month', label: '月份 YYYY-MM'},
+      {key: 'type', label: '費用類型'}, {key: 'amount', label: '金額', type: 'number'}, {key: 'note', label: '備註'}
+    ]},
+  qcTemplates: {table: 'qcTemplates', title: '檢驗範本', addFn: 'genericAdd', args: ['qcTemplates'],
+    fields: [{key: 'name', label: '範本名稱'}, {key: 'appliesTo', label: '適用對象（原料/成品）'}]},
+  partners: {table: 'partners', title: '合夥人設定', addFn: 'genericAdd', args: ['partners'],
+    fields: [{key: 'name', label: '合夥人姓名'}, {key: 'sharePct', label: '分潤比例(%)', type: 'number'}]},
+  expenseCategories: {table: 'expenseCategories', title: '零用金類別設定', addFn: 'genericAdd', args: ['expenseCategories'],
+    fields: [{key: 'name', label: '類別名稱'}, {key: 'linkInventory', label: '連動原料庫存(true/false)'}]},
+  accountCategories: {table: 'accountCategories', title: '損益表科目設定', addFn: 'genericAdd', args: ['accountCategories'],
+    fields: [
+      {key: 'name', label: '科目名稱'}, {key: 'type', label: '類型（收入/變動成本/固定成本/稅金）'},
+      {key: 'source', label: '資料來源（auto/manual）'},
+      {key: 'autoSource', label: '自動來源（shipmentIncome/materialCost/pettyCashOther/productionExpense）'}
+    ]},
+  manualLedgerEntries: {table: 'manualLedgerEntries', title: '損益表手動分類帳', addFn: 'genericAdd', args: ['manualLedgerEntries'],
+    fields: [
+      {key: 'month', label: '月份 YYYY-MM'}, {key: 'categoryId', label: '科目ID'},
+      {key: 'counterparty', label: '對象'}, {key: 'amount', label: '金額', type: 'number'}, {key: 'note', label: '備註'}
+    ]}
+};
+
+function renderPage() {
+  var root = document.getElementById('pageRoot');
+  if (!root) return;
+  var page = state.page;
+  if (page === 'dashboard') return renderDashboard(root);
+  if (GENERIC_PAGES[page]) return renderGenericList(root, page);
+  if (page === 'purchases') return renderPurchases(root);
+  if (page === 'productionBatches') return renderProductionBatches(root);
+  if (page === 'shipments') return renderShipments(root);
+  if (page === 'customerInvoices') return renderInvoices(root);
+  if (page === 'qcRecords') return renderQcRecords(root);
+  if (page === 'costAnalysis') return renderCostAnalysis(root);
+  if (page === 'pettyCash') return renderPettyCash(root);
+  if (page === 'incomeStatement') return renderIncomeStatement(root);
+  if (page === 'users') return renderUsers(root);
+  root.innerHTML = '<p>頁面開發中</p>';
+}
+
+function fmt(n) { return (Number(n) || 0).toLocaleString(undefined, {maximumFractionDigits: 2}); }
+
+// ============ 通用列表 CRUD ============
+function renderGenericList(root, page) {
+  var cfg = GENERIC_PAGES[page];
+  var rows = state.data[cfg.table] || [];
+  var editable = canEdit(page);
+  root.innerHTML = '<div class="card"><div class="toolbar">' +
+    '<h2 style="margin:0;flex:1;">' + cfg.title + '</h2>' +
+    (editable ? '<button class="primary" id="addBtn">新增</button>' : '') +
+    '</div><table><thead><tr>' +
+    cfg.fields.map(function(f) { return '<th>' + f.label.split('（')[0] + '</th>'; }).join('') +
+    (editable ? '<th></th>' : '') + '</tr></thead><tbody>' +
+    rows.map(function(r) {
+      return '<tr>' + cfg.fields.map(function(f) { return '<td>' + (r[f.key] || '') + '</td>'; }).join('') +
+        (editable ? '<td><button data-edit="' + r.id + '">編輯</button> <button class="danger" data-del="' + r.id + '">刪除</button></td>' : '') +
+        '</tr>';
+    }).join('') + '</tbody></table></div>';
+  if (editable) {
+    document.getElementById('addBtn').onclick = function() { openGenericForm(page, null); };
+    root.querySelectorAll('[data-edit]').forEach(function(b) {
+      b.onclick = function() {
+        var id = b.getAttribute('data-edit');
+        openGenericForm(page, rows.filter(function(r) { return String(r.id) === id; })[0]);
+      };
+    });
+    root.querySelectorAll('[data-del]').forEach(function(b) {
+      b.onclick = function() {
+        if (!confirm('確定刪除？')) return;
+        callServer('genericDelete', [state.token, page, b.getAttribute('data-del')]).then(loadAll);
+      };
+    });
+  }
+}
+
+function openGenericForm(page, existing) {
+  var cfg = GENERIC_PAGES[page];
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = '<div class="modal"><h3>' + (existing ? '編輯' : '新增') + cfg.title + '</h3>' +
+    cfg.fields.map(function(f) {
+      return '<label>' + f.label + '</label><input data-field="' + f.key + '" type="' + (f.type || 'text') + '" value="' +
+        (existing ? (existing[f.key] || '') : '') + '">';
+    }).join('') +
+    '<div style="margin-top:16px;text-align:right;"><button id="cancelBtn">取消</button> ' +
+    '<button class="primary" id="saveBtn">儲存</button></div></div>';
+  document.body.appendChild(overlay);
+  overlay.querySelector('#cancelBtn').onclick = function() { overlay.remove(); };
+  overlay.querySelector('#saveBtn').onclick = function() {
+    var data = {};
+    cfg.fields.forEach(function(f) {
+      data[f.key] = overlay.querySelector('[data-field="' + f.key + '"]').value;
+    });
+    var call = existing ? callServer('genericUpdate', [state.token, page, existing.id, data])
+      : callServer('genericAdd', [state.token, page, data]);
+    call.then(function() { overlay.remove(); loadAll(); }).catch(function(e) { alert(e.message || e); });
+  };
+}
+
+// ============ 儀表板 ============
+function renderDashboard(root) {
+  root.innerHTML = '<div class="cards">' +
+    '<div class="stat"><div>原料種類</div><div class="num">' + (state.data.materials || []).length + '</div></div>' +
+    '<div class="stat"><div>生產批次數</div><div class="num">' + (state.data.productionBatches || []).length + '</div></div>' +
+    '<div class="stat"><div>客戶數</div><div class="num">' + (state.data.customers || []).length + '</div></div>' +
+    '<div class="stat"><div>未收款請款單</div><div class="num">' +
+    (state.data.customerInvoices || []).filter(function(i) { return i.status !== '已收款'; }).length + '</div></div>' +
+    '</div>';
+}
+
+// ============ 進貨單 ============
+function renderPurchases(root) {
+  var rows = state.data.purchases || [];
+  var materials = state.data.materials || [];
+  var suppliers = state.data.suppliers || [];
+  var editable = canEdit('purchases');
+  function matName(id) { var m = materials.filter(function(x){return String(x.id)===String(id);})[0]; return m ? m.name : id; }
+  function supName(id) { var s = suppliers.filter(function(x){return String(x.id)===String(id);})[0]; return s ? s.name : id; }
+  root.innerHTML = '<div class="card"><div class="toolbar"><h2 style="margin:0;flex:1;">進貨單</h2>' +
+    (editable ? '<button class="primary" id="addBtn">新增進貨</button>' : '') + '</div>' +
+    '<table><thead><tr><th>日期</th><th>供應商</th><th>原料</th><th>批號</th><th>數量</th><th>單價</th><th>金額</th><th>效期</th><th>驗收</th></tr></thead><tbody>' +
+    rows.map(function(r) {
+      return '<tr><td>' + r.date + '</td><td>' + supName(r.supplierId) + '</td><td>' + matName(r.materialId) + '</td>' +
+        '<td>' + r.batchNo + '</td><td>' + r.quantity + '</td><td>' + fmt(r.unitPrice) + '</td><td>' + fmt(r.amount) +
+        '</td><td>' + (r.expiryDate || '') + '</td><td>' + (r.inspectionStatus || '') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+  if (editable) {
+    document.getElementById('addBtn').onclick = function() { openPurchaseForm(materials, suppliers); };
+  }
+}
+function openPurchaseForm(materials, suppliers) {
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = '<div class="modal"><h3>新增進貨</h3>' +
+    '<label>供應商</label><select id="f_supplierId">' + suppliers.map(function(s){return '<option value="'+s.id+'">'+s.name+'</option>';}).join('') + '</select>' +
+    '<label>原料</label><select id="f_materialId">' + materials.map(function(m){return '<option value="'+m.id+'">'+m.name+'</option>';}).join('') + '</select>' +
+    '<label>進貨日期</label><input id="f_date" type="date" value="' + new Date().toISOString().slice(0,10) + '">' +
+    '<label>批號（供應商提供）</label><input id="f_batchNo" type="text">' +
+    '<label>數量</label><input id="f_quantity" type="number">' +
+    '<label>單價</label><input id="f_unitPrice" type="number">' +
+    '<label>效期</label><input id="f_expiryDate" type="date">' +
+    '<label>驗收狀態</label><select id="f_inspectionStatus"><option>合格</option><option>不合格</option><option>待驗</option></select>' +
+    '<div style="margin-top:16px;text-align:right;"><button id="cancelBtn">取消</button> <button class="primary" id="saveBtn">儲存</button></div></div>';
+  document.body.appendChild(overlay);
+  overlay.querySelector('#cancelBtn').onclick = function() { overlay.remove(); };
+  overlay.querySelector('#saveBtn').onclick = function() {
+    var data = {
+      supplierId: overlay.querySelector('#f_supplierId').value,
+      materialId: overlay.querySelector('#f_materialId').value,
+      date: overlay.querySelector('#f_date').value,
+      batchNo: overlay.querySelector('#f_batchNo').value,
+      quantity: overlay.querySelector('#f_quantity').value,
+      unitPrice: overlay.querySelector('#f_unitPrice').value,
+      expiryDate: overlay.querySelector('#f_expiryDate').value,
+      inspectionStatus: overlay.querySelector('#f_inspectionStatus').value
+    };
+    callServer('addPurchase', [state.token, data]).then(function() { overlay.remove(); loadAll(); }).catch(function(e){alert(e.message||e);});
+  };
+}
+
+// ============ 生產批次 ============
+function renderProductionBatches(root) {
+  var rows = state.data.productionBatches || [];
+  var products = state.data.products || [];
+  var usage = state.data.productionMaterialUsage || [];
+  var editable = canEdit('productionBatches');
+  function prodName(id) { var p = products.filter(function(x){return String(x.id)===String(id);})[0]; return p ? p.name : id; }
+  root.innerHTML = '<div class="card"><div class="toolbar"><h2 style="margin:0;flex:1;">生產批次</h2>' +
+    (editable ? '<button class="primary" id="addBtn">新增批次</button>' : '') + '</div>' +
+    '<table><thead><tr><th>生產批號</th><th>產品</th><th>日期</th><th>產線</th><th>負責人</th><th>計畫產量</th><th>實際產量</th><th>狀態</th><th></th></tr></thead><tbody>' +
+    rows.map(function(r) {
+      return '<tr><td>' + r.batchNo + '</td><td>' + prodName(r.productId) + '</td><td>' + r.date + '</td><td>' + (r.line||'') +
+        '</td><td>' + (r.responsible||'') + '</td><td>' + r.plannedQty + '</td><td>' + r.actualQty + '</td><td>' + r.status +
+        '</td><td>' + (editable ? '<button data-usage="' + r.batchNo + '">用料明細</button>' : '') + '</td></tr>';
+    }).join('') + '</tbody></table></div><div id="usagePanel"></div>';
+  if (editable) {
+    document.getElementById('addBtn').onclick = function() { openBatchForm(products); };
+    root.querySelectorAll('[data-usage]').forEach(function(b) {
+      b.onclick = function() { renderUsagePanel(b.getAttribute('data-usage')); };
+    });
+  }
+}
+function openBatchForm(products) {
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = '<div class="modal"><h3>新增生產批次</h3>' +
+    '<label>產品</label><select id="f_productId">' + products.map(function(p){return '<option value="'+p.id+'">'+p.name+'</option>';}).join('') + '</select>' +
+    '<label>生產日期</label><input id="f_date" type="date" value="' + new Date().toISOString().slice(0,10) + '">' +
+    '<label>產線</label><input id="f_line" type="text">' +
+    '<label>負責人</label><input id="f_responsible" type="text">' +
+    '<label>計畫產量</label><input id="f_plannedQty" type="number">' +
+    '<label>實際產量</label><input id="f_actualQty" type="number">' +
+    '<div style="margin-top:16px;text-align:right;"><button id="cancelBtn">取消</button> <button class="primary" id="saveBtn">儲存</button></div></div>';
+  document.body.appendChild(overlay);
+  overlay.querySelector('#cancelBtn').onclick = function() { overlay.remove(); };
+  overlay.querySelector('#saveBtn').onclick = function() {
+    var data = {
+      productId: overlay.querySelector('#f_productId').value,
+      date: overlay.querySelector('#f_date').value,
+      line: overlay.querySelector('#f_line').value,
+      responsible: overlay.querySelector('#f_responsible').value,
+      plannedQty: overlay.querySelector('#f_plannedQty').value,
+      actualQty: overlay.querySelector('#f_actualQty').value
+    };
+    callServer('addProductionBatch', [state.token, data]).then(function() { overlay.remove(); loadAll(); }).catch(function(e){alert(e.message||e);});
+  };
+}
+function renderUsagePanel(batchNo) {
+  var panel = document.getElementById('usagePanel');
+  var usage = (state.data.productionMaterialUsage || []).filter(function(u) { return u.batchNo === batchNo; });
+  var materials = state.data.materials || [];
+  function matName(id) { var m = materials.filter(function(x){return String(x.id)===String(id);})[0]; return m ? m.name : id; }
+  panel.innerHTML = '<div class="card"><h3>用料明細 — ' + batchNo + '</h3>' +
+    '<table><thead><tr><th>原料</th><th>使用批號</th><th>數量</th></tr></thead><tbody>' +
+    usage.map(function(u) { return '<tr><td>' + matName(u.materialId) + '</td><td>' + u.materialBatchNo + '</td><td>' + u.quantity + '</td></tr>'; }).join('') +
+    '</tbody></table>' +
+    (canEdit('productionBatches') ?
+      '<div style="margin-top:12px;"><select id="u_materialId">' + materials.map(function(m){return '<option value="'+m.id+'">'+m.name+'</option>';}).join('') + '</select> ' +
+      '<input id="u_materialBatchNo" placeholder="原料批號" style="width:120px;"> ' +
+      '<input id="u_quantity" type="number" placeholder="數量" style="width:80px;"> ' +
+      '<button class="primary" id="u_addBtn">新增用料</button></div>' : '') + '</div>';
+  if (canEdit('productionBatches')) {
+    document.getElementById('u_addBtn').onclick = function() {
+      var data = {batchNo: batchNo, materialId: document.getElementById('u_materialId').value,
+        materialBatchNo: document.getElementById('u_materialBatchNo').value, quantity: document.getElementById('u_quantity').value};
+      callServer('addProductionMaterialUsage', [state.token, data]).then(function() { loadAll().then(function(){ renderUsagePanel(batchNo); }); });
+    };
+  }
+}
+
+// ============ 出貨單 ============
+function renderShipments(root) {
+  var rows = state.data.shipments || [];
+  var products = state.data.products || [];
+  var customers = state.data.customers || [];
+  var editable = canEdit('shipments');
+  function prodName(id) { var p = products.filter(function(x){return String(x.id)===String(id);})[0]; return p ? p.name : id; }
+  function custName(id) { var c = customers.filter(function(x){return String(x.id)===String(id);})[0]; return c ? c.name : id; }
+  root.innerHTML = '<div class="card"><div class="toolbar"><h2 style="margin:0;flex:1;">出貨單</h2>' +
+    (editable ? '<button class="primary" id="addBtn">新增出貨</button>' : '') + '</div>' +
+    '<table><thead><tr><th>出貨單號</th><th>客戶</th><th>日期</th><th>成品</th><th>批號</th><th>數量</th><th>單價</th><th>總計</th><th>請款狀態</th></tr></thead><tbody>' +
+    rows.map(function(r) {
+      return '<tr><td>' + r.shipmentNo + '</td><td>' + custName(r.customerId) + '</td><td>' + r.date + '</td><td>' + prodName(r.productId) +
+        '</td><td>' + r.batchNo + '</td><td>' + r.quantity + '</td><td>' + fmt(r.unitPrice) + '</td><td>' + fmt(r.total) +
+        '</td><td>' + (r.invoiceId ? '已請款' : '未請款') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+  if (editable) {
+    document.getElementById('addBtn').onclick = function() { openShipmentForm(products, customers); };
+  }
+}
+function openShipmentForm(products, customers) {
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = '<div class="modal"><h3>新增出貨</h3>' +
+    '<label>客戶</label><select id="f_customerId">' + customers.map(function(c){return '<option value="'+c.id+'">'+c.name+'</option>';}).join('') + '</select>' +
+    '<label>成品</label><select id="f_productId">' + products.map(function(p){return '<option value="'+p.id+'">'+p.name+'</option>';}).join('') + '</select>' +
+    '<label>出貨日期</label><input id="f_date" type="date" value="' + new Date().toISOString().slice(0,10) + '">' +
+    '<label>成品批號</label><input id="f_batchNo" type="text">' +
+    '<label>數量</label><input id="f_quantity" type="number">' +
+    '<label>單價</label><input id="f_unitPrice" type="number">' +
+    '<label>稅金</label><input id="f_tax" type="number" value="0">' +
+    '<div style="margin-top:16px;text-align:right;"><button id="cancelBtn">取消</button> <button class="primary" id="saveBtn">儲存</button></div></div>';
+  document.body.appendChild(overlay);
+  overlay.querySelector('#cancelBtn').onclick = function() { overlay.remove(); };
+  overlay.querySelector('#saveBtn').onclick = function() {
+    var data = {
+      customerId: overlay.querySelector('#f_customerId').value,
+      productId: overlay.querySelector('#f_productId').value,
+      date: overlay.querySelector('#f_date').value,
+      batchNo: overlay.querySelector('#f_batchNo').value,
+      quantity: overlay.querySelector('#f_quantity').value,
+      unitPrice: overlay.querySelector('#f_unitPrice').value,
+      tax: overlay.querySelector('#f_tax').value
+    };
+    callServer('addShipment', [state.token, data]).then(function() { overlay.remove(); loadAll(); }).catch(function(e){alert(e.message||e);});
+  };
+}
+
+// ============ 客戶請款明細 ============
+function renderInvoices(root) {
+  var rows = state.data.customerInvoices || [];
+  var customers = state.data.customers || [];
+  var editable = canEdit('customerInvoices');
+  function custName(id) { var c = customers.filter(function(x){return String(x.id)===String(id);})[0]; return c ? c.name : id; }
+  root.innerHTML = '<div class="card"><div class="toolbar"><h2 style="margin:0;flex:1;">客戶請款明細</h2>' +
+    (editable ? '<button class="primary" id="addBtn">開立請款單</button>' : '') + '</div>' +
+    '<table><thead><tr><th>請款單號</th><th>客戶</th><th>期間</th><th>總金額</th><th>狀態</th><th>收款日期</th><th></th></tr></thead><tbody>' +
+    rows.map(function(r) {
+      return '<tr><td>' + r.invoiceNo + '</td><td>' + custName(r.customerId) + '</td><td>' + r.periodStart + ' ~ ' + r.periodEnd +
+        '</td><td>' + fmt(r.totalAmount) + '</td><td>' + r.status + '</td><td>' + (r.receivedDate || '') + '</td>' +
+        '<td><button data-dl="' + r.id + '">下載Excel</button>' +
+        (editable && r.status !== '已收款' ? ' <button data-received="' + r.id + '">標記已收款</button>' : '') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+  if (editable) {
+    document.getElementById('addBtn').onclick = function() { openInvoiceForm(customers); };
+    root.querySelectorAll('[data-received]').forEach(function(b) {
+      b.onclick = function() {
+        callServer('markInvoiceReceived', [state.token, b.getAttribute('data-received'), new Date().toISOString().slice(0,10)]).then(loadAll);
+      };
+    });
+  }
+  root.querySelectorAll('[data-dl]').forEach(function(b) {
+    b.onclick = function() {
+      callServer('generateCustomerInvoiceXlsx', [state.token, b.getAttribute('data-dl')]).then(function(res) {
+        var link = document.createElement('a');
+        link.href = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + res.base64;
+        link.download = res.filename;
+        link.click();
+      }).catch(function(e){ alert(e.message||e); });
+    };
+  });
+}
+function openInvoiceForm(customers) {
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = '<div class="modal"><h3>開立請款單</h3>' +
+    '<label>客戶</label><select id="f_customerId">' + customers.map(function(c){return '<option value="'+c.id+'">'+c.name+'</option>';}).join('') + '</select>' +
+    '<label>期間起</label><input id="f_start" type="date">' +
+    '<label>期間迄</label><input id="f_end" type="date">' +
+    '<div style="margin-top:16px;text-align:right;"><button id="cancelBtn">取消</button> <button class="primary" id="saveBtn">產生</button></div></div>';
+  document.body.appendChild(overlay);
+  overlay.querySelector('#cancelBtn').onclick = function() { overlay.remove(); };
+  overlay.querySelector('#saveBtn').onclick = function() {
+    callServer('createCustomerInvoice', [state.token, overlay.querySelector('#f_customerId').value,
+      overlay.querySelector('#f_start').value, overlay.querySelector('#f_end').value])
+      .then(function() { overlay.remove(); loadAll(); }).catch(function(e){ alert(e.message||e); });
+  };
+}
+
+// ============ 品管檢驗紀錄 ============
+function renderQcRecords(root) {
+  var rows = state.data.qcRecords || [];
+  var templates = state.data.qcTemplates || [];
+  var editable = canEdit('qcRecords');
+  function tplName(id) { var t = templates.filter(function(x){return String(x.id)===String(id);})[0]; return t ? t.name : id; }
+  root.innerHTML = '<div class="card"><div class="toolbar"><h2 style="margin:0;flex:1;">品管檢驗紀錄</h2>' +
+    (editable ? '<button class="primary" id="addBtn">新增檢驗</button>' : '') + '</div>' +
+    '<table><thead><tr><th>範本</th><th>關聯批號</th><th>檢驗人</th><th>日期</th><th>結果</th></tr></thead><tbody>' +
+    rows.map(function(r) {
+      return '<tr><td>' + tplName(r.templateId) + '</td><td>' + r.refBatchNo + '</td><td>' + r.inspector + '</td><td>' + r.date + '</td><td>' + r.result + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+  if (editable) {
+    document.getElementById('addBtn').onclick = function() { openQcForm(templates); };
+  }
+}
+function openQcForm(templates) {
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  var itemsHtml = '<div id="qcItemsWrap"></div><button type="button" id="addItemBtn">新增檢驗項目</button>';
+  overlay.innerHTML = '<div class="modal"><h3>新增檢驗紀錄</h3>' +
+    '<label>範本</label><select id="f_templateId">' + templates.map(function(t){return '<option value="'+t.id+'">'+t.name+'</option>';}).join('') + '</select>' +
+    '<label>關聯批號</label><input id="f_refBatchNo" type="text">' +
+    '<label>檢驗人</label><input id="f_inspector" type="text">' +
+    '<label>日期</label><input id="f_date" type="date" value="' + new Date().toISOString().slice(0,10) + '">' +
+    '<div style="margin-top:12px;"><b>檢驗項目</b>' + itemsHtml + '</div>' +
+    '<div style="margin-top:16px;text-align:right;"><button id="cancelBtn">取消</button> <button class="primary" id="saveBtn">儲存</button></div></div>';
+  document.body.appendChild(overlay);
+  function addItemRow() {
+    var wrap = overlay.querySelector('#qcItemsWrap');
+    var row = document.createElement('div');
+    row.style = 'display:flex;gap:4px;margin-bottom:4px;';
+    row.innerHTML = '<input placeholder="項目名稱" class="qc_item_name" style="flex:1;">' +
+      '<input placeholder="實際值" class="qc_item_value" style="flex:1;">' +
+      '<select class="qc_item_pass"><option value="true">合格</option><option value="false">不合格</option></select>';
+    wrap.appendChild(row);
+  }
+  addItemRow();
+  overlay.querySelector('#addItemBtn').onclick = addItemRow;
+  overlay.querySelector('#cancelBtn').onclick = function() { overlay.remove(); };
+  overlay.querySelector('#saveBtn').onclick = function() {
+    var items = [];
+    overlay.querySelectorAll('#qcItemsWrap > div').forEach(function(row) {
+      items.push({
+        itemName: row.querySelector('.qc_item_name').value,
+        value: row.querySelector('.qc_item_value').value,
+        pass: row.querySelector('.qc_item_pass').value === 'true'
+      });
+    });
+    var record = {
+      templateId: overlay.querySelector('#f_templateId').value,
+      refBatchNo: overlay.querySelector('#f_refBatchNo').value,
+      inspector: overlay.querySelector('#f_inspector').value,
+      date: overlay.querySelector('#f_date').value
+    };
+    callServer('addQcRecord', [state.token, record, items]).then(function() { overlay.remove(); loadAll(); }).catch(function(e){alert(e.message||e);});
+  };
+}
+
+// ============ 成本分析 ============
+function renderCostAnalysis(root) {
+  var month = (root.dataset && root.dataset.month) || new Date().toISOString().slice(0,7);
+  root.innerHTML = '<div class="card"><h2>成本分析</h2>' +
+    '<label>月份</label><input type="month" id="costMonth" value="' + month + '">' +
+    '<div id="costReport" style="margin-top:12px;"></div></div>';
+  function load(m) {
+    callServer('monthlyCostReport', [state.token, m]).then(function(res) {
+      var products = state.data.products || [];
+      var el = document.getElementById('costReport');
+      el.innerHTML = '<table><thead><tr><th>批號</th><th>原料成本</th><th>直接費用</th><th>分攤共同費用</th><th>總成本</th><th>實際產量</th><th>單位成本</th><th>售價</th><th>單位毛利</th></tr></thead><tbody>' +
+        res.rows.map(function(r) {
+          return '<tr><td>' + r.batchNo + '</td><td>' + fmt(r.materialCost) + '</td><td>' + fmt(r.directExpense) + '</td><td>' + fmt(r.commonExpense) +
+            '</td><td>' + fmt(r.totalCost) + '</td><td>' + r.actualQty + '</td><td>' + fmt(r.unitCost) + '</td><td>' + fmt(r.price) + '</td><td>' + fmt(r.unitMargin) + '</td></tr>';
+        }).join('') + '</tbody></table>' +
+        '<p style="margin-top:12px;"><b>當月總計</b> — 原料成本：' + fmt(res.totals.materialCost) + '，費用：' + fmt(res.totals.directExpense + res.totals.commonExpense) +
+        '，總成本：' + fmt(res.totals.totalCost) + '</p>';
+    });
+  }
+  document.getElementById('costMonth').onchange = function(e) { load(e.target.value); };
+  load(month);
+}
+
+// ============ 零用金對帳 ============
+function renderPettyCash(root) {
+  var editable = canEdit('pettyCash');
+  var categories = state.data.expenseCategories || [];
+  root.innerHTML = '<div class="card"><div class="toolbar"><h2 style="margin:0;flex:1;">零用金對帳</h2>' +
+    (editable ? '<button class="primary" id="addBtn">新增紀錄</button> <button id="catBtn">類別設定</button>' : '') + '</div>' +
+    '<div id="pcTable"></div></div>';
+  function load() {
+    callServer('pettyCashList', [state.token]).then(function(rows) {
+      function catName(id) { var c = categories.filter(function(x){return String(x.id)===String(id);})[0]; return c ? c.name : id; }
+      document.getElementById('pcTable').innerHTML = '<table><thead><tr><th>日期</th><th>廠商</th><th>類別</th><th>品名</th><th>收支</th><th>總計</th><th>餘額</th></tr></thead><tbody>' +
+        rows.map(function(r) {
+          return '<tr><td>' + r.date + '</td><td>' + r.vendor + '</td><td>' + catName(r.categoryId) + '</td><td>' + r.itemName +
+            '</td><td>' + r.direction + '</td><td>' + fmt(r.total) + '</td><td>' + fmt(r.runningBalance) + '</td></tr>';
+        }).join('') + '</tbody></table>';
+    });
+  }
+  load();
+  if (editable) {
+    document.getElementById('addBtn').onclick = function() { openPettyCashForm(categories, load); };
+    document.getElementById('catBtn').onclick = function() { state.page = 'expenseCategories'; render(); renderPage(); };
+  }
+}
+function openPettyCashForm(categories, reload) {
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = '<div class="modal"><h3>新增零用金紀錄</h3>' +
+    '<label>日期</label><input id="f_date" type="date" value="' + new Date().toISOString().slice(0,10) + '">' +
+    '<label>廠商</label><input id="f_vendor" type="text">' +
+    '<label>類別</label><select id="f_categoryId">' + categories.map(function(c){return '<option value="'+c.id+'">'+c.name+'</option>';}).join('') + '</select>' +
+    '<label>品名</label><input id="f_itemName" type="text">' +
+    '<label>收支別</label><select id="f_direction"><option value="支出">支出</option><option value="收入">收入</option></select>' +
+    '<label>數量</label><input id="f_quantity" type="number" value="1">' +
+    '<label>單價</label><input id="f_unitPrice" type="number">' +
+    '<label>稅金</label><input id="f_tax" type="number" value="0">' +
+    '<label>付款方式</label><select id="f_paymentMethod"><option>現金</option><option>月結</option></select>' +
+    '<div style="margin-top:16px;text-align:right;"><button id="cancelBtn">取消</button> <button class="primary" id="saveBtn">儲存</button></div></div>';
+  document.body.appendChild(overlay);
+  overlay.querySelector('#cancelBtn').onclick = function() { overlay.remove(); };
+  overlay.querySelector('#saveBtn').onclick = function() {
+    var data = {
+      date: overlay.querySelector('#f_date').value, vendor: overlay.querySelector('#f_vendor').value,
+      categoryId: overlay.querySelector('#f_categoryId').value, itemName: overlay.querySelector('#f_itemName').value,
+      direction: overlay.querySelector('#f_direction').value, quantity: overlay.querySelector('#f_quantity').value,
+      unitPrice: overlay.querySelector('#f_unitPrice').value, tax: overlay.querySelector('#f_tax').value,
+      paymentMethod: overlay.querySelector('#f_paymentMethod').value
+    };
+    callServer('addPettyCashTransaction', [state.token, data]).then(function() { overlay.remove(); loadAll().then(reload); }).catch(function(e){alert(e.message||e);});
+  };
+}
+
+// ============ 損益表 ============
+function renderIncomeStatement(root) {
+  var year = new Date().getFullYear();
+  root.innerHTML = '<div class="card"><h2>損益表</h2>' +
+    '<label>年度</label><input type="number" id="isYear" value="' + year + '" style="width:100px;">' +
+    '<div id="isTable" style="margin-top:12px;"></div></div>';
+  function load(y) {
+    callServer('incomeStatementYear', [state.token, y]).then(function(rows) {
+      document.getElementById('isTable').innerHTML = '<table><thead><tr><th>月份</th><th>收入</th><th>變動成本</th><th>毛利</th><th>毛利率</th><th>固定成本</th><th>淨獲利</th><th>淨利率</th></tr></thead><tbody>' +
+        rows.map(function(r) {
+          return '<tr><td>' + r.month + '</td><td>' + fmt(r.income) + '</td><td>' + fmt(r.variableCost) + '</td><td>' + fmt(r.grossProfit) +
+            '</td><td>' + (r.grossMargin*100).toFixed(1) + '%</td><td>' + fmt(r.fixedCost) + '</td><td>' + fmt(r.netProfit) +
+            '</td><td>' + (r.netMargin*100).toFixed(1) + '%</td></tr>';
+        }).join('') + '</tbody></table>';
+    });
+  }
+  document.getElementById('isYear').onchange = function(e) { load(e.target.value); };
+  load(year);
+}
+
+// ============ 使用人員 ============
+function renderUsers(root) {
+  var users = state.data.users || [];
+  var editable = canEdit('users');
+  root.innerHTML = '<div class="card"><div class="toolbar"><h2 style="margin:0;flex:1;">使用人員</h2>' +
+    (editable ? '<button class="primary" id="addBtn">新增使用者</button>' : '') + '</div>' +
+    '<table><thead><tr><th>帳號</th><th>姓名</th><th>角色</th><th>啟用</th></tr></thead><tbody>' +
+    users.map(function(u) { return '<tr><td>' + u.username + '</td><td>' + u.name + '</td><td>' + u.role + '</td><td>' + u.active + '</td></tr>'; }).join('') +
+    '</tbody></table></div>' + renderPermissionMatrix();
+  if (editable) {
+    document.getElementById('addBtn').onclick = openUserForm;
+    wirePermissionMatrix();
+  }
+}
+function openUserForm() {
+  var overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  var roles = ['系統管理員', '廠長主管', '倉管人員', '產線人員', '品管人員', '業務出貨人員', '會計人員'];
+  overlay.innerHTML = '<div class="modal"><h3>新增使用者</h3>' +
+    '<label>帳號</label><input id="f_username" type="text">' +
+    '<label>密碼</label><input id="f_password" type="text">' +
+    '<label>姓名</label><input id="f_name" type="text">' +
+    '<label>角色</label><select id="f_role">' + roles.map(function(r){return '<option>'+r+'</option>';}).join('') + '</select>' +
+    '<div style="margin-top:16px;text-align:right;"><button id="cancelBtn">取消</button> <button class="primary" id="saveBtn">儲存</button></div></div>';
+  document.body.appendChild(overlay);
+  overlay.querySelector('#cancelBtn').onclick = function() { overlay.remove(); };
+  overlay.querySelector('#saveBtn').onclick = function() {
+    var data = {username: overlay.querySelector('#f_username').value, password: overlay.querySelector('#f_password').value,
+      name: overlay.querySelector('#f_name').value, role: overlay.querySelector('#f_role').value};
+    callServer('addUser', [state.token, data]).then(function() { overlay.remove(); loadAll(); }).catch(function(e){alert(e.message||e);});
+  };
+}
+var PERMISSION_MODULE_LABELS = {
+  dashboard: '儀表板', inventory: '原料與庫存', production: '生產管理', shipping: '成品與出貨',
+  billing: '客戶請款明細', qc: '品質/食安', cost: '成本分析', pettyCash: '零用金對帳',
+  incomeStatement: '損益表', users: '使用人員'
+};
+function renderPermissionMatrix() {
+  if (!state.data.roleMatrix) return '';
+  var roles = ['廠長主管', '倉管人員', '產線人員', '品管人員', '業務出貨人員', '會計人員'];
+  var modules = Object.keys(PERMISSION_MODULE_LABELS);
+  return '<div class="card"><h3>角色權限矩陣（點擊切換 edit → view → none → edit）</h3>' +
+    '<table><thead><tr><th>模組</th>' + roles.map(function(r){return '<th>'+r+'</th>';}).join('') + '</tr></thead><tbody>' +
+    modules.map(function(m) {
+      return '<tr><td>' + PERMISSION_MODULE_LABELS[m] + '</td>' + roles.map(function(r) {
+        var lvl = state.data.roleMatrix[m] ? state.data.roleMatrix[m][r] : 'view';
+        return '<td><button class="permCell" data-module="' + m + '" data-role="' + r + '">' + lvl + '</button></td>';
+      }).join('') + '</tr>';
+    }).join('') + '</tbody></table></div>';
+}
+function wirePermissionMatrix() {
+  document.querySelectorAll('.permCell').forEach(function(btn) {
+    btn.onclick = function() {
+      var cur = btn.innerText;
+      var next = cur === 'edit' ? 'view' : (cur === 'view' ? 'none' : 'edit');
+      callServer('updateRolePermission', [state.token, btn.getAttribute('data-module'), btn.getAttribute('data-role'), next])
+        .then(function() { loadAll(); });
+    };
+  });
+}
+
+render();
+</script>
+</body>
+</html>
