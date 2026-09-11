@@ -1,0 +1,37 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Syntax-check Code.gs
+        run: |
+          cp apps-script/Code.gs /tmp/Code.js
+          node --check /tmp/Code.js
+
+      - name: Syntax-check Index.html inline script
+        run: |
+          node -e "
+          const fs = require('fs');
+          const content = fs.readFileSync('apps-script/Index.html', 'utf8');
+          const m = content.match(/<script>([\s\S]*)<\/script>/);
+          fs.writeFileSync('/tmp/Index.js', m[1]);
+          "
+          node --check /tmp/Index.js
+
+      - name: Run business-logic tests (mocked Apps Script runtime)
+        run: node test/run.js

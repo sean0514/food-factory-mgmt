@@ -68,14 +68,32 @@
 - **CSV 匯出**：所有走 `GENERIC_PAGES` 通用列表的頁面都有「匯出CSV」按鈕
   （純前端把目前畫面資料轉 CSV 下載，不用另外呼叫後端）。
 
+## 已完成（第三輪補齊）
+
+- **CSV 匯入**：通用列表頁面（`GENERIC_PAGES`）現在有「匯入CSV」按鈕，格式跟
+  「匯出CSV」產生的檔案一致（用欄位標籤對表頭），逐列呼叫 `genericAdd`，
+  單列失敗不會中斷整批，最後回報成功/失敗筆數（見 `importCsvToPage`/`parseCsv`）
+- **自動化測試**：`test/gas-mock.js` 用 Node 內建的 `vm` 模組模擬最少必要的
+  Apps Script 服務（試算表讀寫、`Utilities`、`CacheService`），讓 `Code.gs`
+  可以直接被載入執行；`test/run.js` 針對核心商業邏輯斷言（品管合格判定、
+  密碼雜湊、權限矩陣、進貨庫存連動、批次成本試算、成品出貨扣庫存、零用金
+  連動原料庫存、以及先前修過的 QC 表名 bug 的迴歸測試），跑 `node test/run.js`
+  即可，共 23 個測試。**沒有**測試到需要真實 Google 服務的部分
+  （`generateCustomerInvoiceXlsx` 用到 `DriveApp`/`UrlFetchApp`/
+  `SpreadsheetApp.create`，這些在模擬環境裡沒有實作，只能手動在瀏覽器測）
+- **CI**：`.github/workflows/ci.yml` 在 push/PR 到 main 時跑語法檢查＋
+  `test/run.js`；`.github/workflows/deploy.yml`（沿用實習生系統的做法）
+  在 push 到 main 時用 `clasp` 把 `apps-script/` 推上去並更新既有部署，
+  **需要先設定三個 Secrets 才會動**（`CLASPRC_JSON`/`CLASP_SCRIPT_ID`/
+  `CLASP_DEPLOYMENT_ID`），設定步驟寫在 `deploy.yml` 檔案開頭的註解裡
+
 ## 已知限制 / 下一步
 
 1. `COMPANY_INFO`（請款單 Excel 用的公司資訊）目前是空白常數，要請使用者填
-2. CSV 只做了匯出，還沒做匯入（實習生系統有共用函式 `handleImportGenericFile`
-   等可以參考移植，之後要做的話建議走同一套模式）
-3. 沒有自動化測試，所有修改都要手動在瀏覽器測試
-4. 沒有 GitHub Actions 自動部署（實習生系統有 `clasp` 部署流程可參考），
-   目前部署方式是手動貼進 Apps Script 線上編輯器（見 `README.md`）
-5. `addShipment` 用批號比對庫存，若同一批號同一產品因故被拆成多筆
+2. CI 自動部署還沒真的跑過（需要使用者本機執行 `clasp login`/`clasp pull`
+   拿到 Secrets 填進 GitHub 才能生效，見 `deploy.yml` 開頭註解）
+3. `addShipment` 用批號比對庫存，若同一批號同一產品因故被拆成多筆
    `ProductInventory`（理論上不會發生，`completeProductionBatch` 有做
    累加合併），扣庫存只會扣到第一筆吻合的紀錄
+4. `generateCustomerInvoiceXlsx`、品管範本裡涉及真實 Google 服務的路徑，
+   自動化測試無法覆蓋，改動後仍需手動在瀏覽器測試
